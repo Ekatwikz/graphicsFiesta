@@ -1,0 +1,10 @@
+# Comple outputs
+build
+
+# compile DB and whatnots
+compile_commands.json
+.cache
+
+# misc
+*.zip
+
