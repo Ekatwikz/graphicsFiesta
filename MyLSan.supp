@@ -1,0 +1,3 @@
+# if glfwCreateWindow leaks, that's not actually my fault lol
+# https://clang.llvm.org/docs/AddressSanitizer.html#suppressing-memory-leaks
+leak:glfwCreateWindow
