@@ -33,8 +33,13 @@ void key_handler(GLFWwindow* window, int key, int scancode, int action, int mods
 const char* vertexShaderSource = R"(
     #version 330 core
     layout (location = 0) in vec3 aPos;
+    layout (location = 1) in vec3 aCol;
+
+    out vec3 triangleColor;
+
     void main() {
-        gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);
+        gl_Position = vec4(aPos, 1.0);
+        triangleColor = aCol;
     }
 )";
 const char* fragmentShaderSource = R"(
@@ -42,10 +47,12 @@ const char* fragmentShaderSource = R"(
     out vec4 FragColor;
 
     uniform vec4 triangleColor;
+    //in vec3 triangleColor;
 
     void main() {
         //FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);
         FragColor = triangleColor;
+        //FragColor = vec4(triangleColor, 1.0);
     };
 )";
 
@@ -90,13 +97,6 @@ int main () {
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetKeyCallback(window, key_handler);
 
-    // setup the array for the vertex buffer object
-    // float vertices[] = {
-    //     -0.5f, -0.5f, 0.0f,
-    //     0.5f, -0.5f, 0.0f,
-    //     0.0f,  0.5f, 0.0f
-    // };
-
     float vertices[] = {
         0.5f,  0.5f, 0.0f,  // top right
         0.5f, -0.5f, 0.0f,  // bottom right
@@ -109,21 +109,21 @@ int main () {
     };
 
     // setup and bind vertex array object
-    uint VAO;
-    glGenVertexArrays(1, &VAO);
-    glBindVertexArray(VAO);
+    uint rectangle_VAO;
+    glGenVertexArrays(1, &rectangle_VAO);
+    glBindVertexArray(rectangle_VAO);
 
     // setup vertex buffer object
     // with our vertices
-    uint VBO;
-    glGenBuffers(1, &VBO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    uint rectangle_points_VBO;
+    glGenBuffers(1, &rectangle_points_VBO);
+    glBindBuffer(GL_ARRAY_BUFFER, rectangle_points_VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
     // setup the element buffer object
-    uint EBO;
-    glGenBuffers(1, &EBO);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    uint rectangle_points_EBO;
+    glGenBuffers(1, &rectangle_points_EBO);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, rectangle_points_EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
     // define the location and format of the vertex attributes,
@@ -195,7 +195,7 @@ int main () {
         float redAmount = sin((float)glfwGetTime() * 4) / 2 + 0.5;
         glUniform4f(glGetUniformLocation(shaderProgram, "triangleColor"), redAmount, 0, 0, 0);
 
-        glBindVertexArray(VAO);
+        glBindVertexArray(rectangle_VAO);
         // glDrawArrays(GL_TRIANGLES, 0, 3); // draw 3 verts
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0); // draw using ebo
         glBindVertexArray(0); // unbind, no need to unbind it every time tho
@@ -205,9 +205,9 @@ int main () {
     }
 
     // cleanup a little and exit
-    glDeleteVertexArrays(1, &VAO);
-    glDeleteBuffers(1, &VBO);
-    glDeleteBuffers(1, &EBO);
+    glDeleteVertexArrays(1, &rectangle_VAO);
+    glDeleteBuffers(1, &rectangle_points_VBO);
+    glDeleteBuffers(1, &rectangle_points_EBO);
     glDeleteProgram(shaderProgram);
     glfwTerminate();
 }
