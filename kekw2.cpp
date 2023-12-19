@@ -35,11 +35,11 @@ const char* vertexShaderSource = R"(
     layout (location = 0) in vec3 aPos;
     layout (location = 1) in vec3 aCol;
 
-    out vec3 triangleColor;
+    out vec3 triangleColorOutput;
 
     void main() {
         gl_Position = vec4(aPos, 1.0);
-        triangleColor = aCol;
+        triangleColorOutput = aCol;
     }
 )";
 const char* fragmentShaderSource = R"(
@@ -47,12 +47,12 @@ const char* fragmentShaderSource = R"(
     out vec4 FragColor;
 
     uniform vec4 triangleColor;
-    //in vec3 triangleColor;
+    in vec3 triangleColorOutput;
 
     void main() {
         //FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);
-        FragColor = triangleColor;
-        //FragColor = vec4(triangleColor, 1.0);
+        //FragColor = triangleColor;
+        FragColor = vec4(triangleColorOutput, 1.0);
     };
 )";
 
@@ -97,12 +97,20 @@ int main () {
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetKeyCallback(window, key_handler);
 
-    float vertices[] = {
+    float positions[] = {
         0.5f,  0.5f, 0.0f,  // top right
         0.5f, -0.5f, 0.0f,  // bottom right
         -0.5f, -0.5f, 0.0f,  // bottom left
         -0.5f,  0.5f, 0.0f   // top left 
     };
+
+    float colors[] = {
+        1.0f,  0.0f, 0.0f,  // top right
+        0.0f,  1.0f, 0.0f,  // top right
+        0.0f,  0.0f, 1.0f,  // top right
+        1.0f,  1.0f, 1.0f  // top right
+    };
+
     uint indices[] = {  // note that we start from 0!
         0, 1, 3,   // first triangle
         1, 2, 3    // second triangle
@@ -115,10 +123,27 @@ int main () {
 
     // setup vertex buffer object
     // with our vertices
-    uint rectangle_points_VBO;
-    glGenBuffers(1, &rectangle_points_VBO);
-    glBindBuffer(GL_ARRAY_BUFFER, rectangle_points_VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    uint rectangle_positions_VBO;
+    glGenBuffers(1, &rectangle_positions_VBO);
+    glBindBuffer(GL_ARRAY_BUFFER, rectangle_positions_VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(positions), positions, GL_STATIC_DRAW);
+
+    // define the location and format of the vertex position attribute,
+    // index=0, b/c we said location=0
+    // 3 b/c 3 values,
+    // GL_FALSE b/c we don't need normalization,
+    // 3*floatsize is stride, (0 means packed, equivalent in this case)
+    // first coord is at [0]
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+    // setup some colors too
+    uint rectangle_colors_VBO;
+    glGenBuffers(1, &rectangle_colors_VBO);
+    glBindBuffer(GL_ARRAY_BUFFER, rectangle_colors_VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(positions), colors, GL_STATIC_DRAW);
+
+    // similar format for the colors
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
     // setup the element buffer object
     uint rectangle_points_EBO;
@@ -126,16 +151,9 @@ int main () {
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, rectangle_points_EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
-    // define the location and format of the vertex attributes,
-    // index=0, b/c we said location=0
-    // 3 b/c 3 values,
-    // GL_FALSE b/c we don't need normalization,
-    // 3*floatsize is stride,
-    // first coord is at [0]
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-
-    // enable the vertex attrib array?
+    // enable the vertex attrib arrays?
     glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
 
     // compiler vertex shader
     uint vertexShader = glCreateShader(GL_VERTEX_SHADER);
@@ -192,7 +210,7 @@ int main () {
         glUseProgram(shaderProgram);
 
         // vary the triangle's color using the uniform in the fragshader
-        float redAmount = sin((float)glfwGetTime() * 4) / 2 + 0.5;
+        float time = sin((float)glfwGetTime() * 4) / 2 + 0.5;
         glUniform4f(glGetUniformLocation(shaderProgram, "triangleColor"), redAmount, 0, 0, 0);
 
         glBindVertexArray(rectangle_VAO);
@@ -206,7 +224,7 @@ int main () {
 
     // cleanup a little and exit
     glDeleteVertexArrays(1, &rectangle_VAO);
-    glDeleteBuffers(1, &rectangle_points_VBO);
+    glDeleteBuffers(1, &rectangle_positions_VBO);
     glDeleteBuffers(1, &rectangle_points_EBO);
     glDeleteProgram(shaderProgram);
     glfwTerminate();
