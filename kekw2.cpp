@@ -46,13 +46,11 @@ const char* fragmentShaderSource = R"(
     #version 330 core
     out vec4 FragColor;
 
-    uniform vec4 triangleColor;
+    uniform float sinTime;
     in vec3 triangleColorOutput;
 
     void main() {
-        //FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);
-        //FragColor = triangleColor;
-        FragColor = vec4(triangleColorOutput, 1.0);
+        FragColor = vec4(triangleColorOutput * sinTime, 1.0);
     };
 )";
 
@@ -210,8 +208,8 @@ int main () {
         glUseProgram(shaderProgram);
 
         // vary the triangle's color using the uniform in the fragshader
-        float time = sin((float)glfwGetTime() * 4) / 2 + 0.5;
-        glUniform4f(glGetUniformLocation(shaderProgram, "triangleColor"), redAmount, 0, 0, 0);
+        float sinTime = sin((float)glfwGetTime() * 4) / 2 + 0.5;
+        glUniform1f(glGetUniformLocation(shaderProgram, "sinTime"), sinTime);
 
         glBindVertexArray(rectangle_VAO);
         // glDrawArrays(GL_TRIANGLES, 0, 3); // draw 3 verts
