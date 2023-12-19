@@ -1,6 +1,6 @@
-#include <math.h>
 #define GLFW_INCLUDE_NONE
 
+#include <math.h>
 #include <iostream>
 #include <GLFW/glfw3.h>
 
@@ -12,10 +12,12 @@ void error_callback(int error, const char* description) {
     glfwTerminate();
     exit(EXIT_FAILURE);
 }
+
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     (void)window;
     glViewport(0, 0, width, height);
 }
+
 void key_handler(GLFWwindow* window, int key, int scancode, int action, int mods) {
     (void)scancode;
     (void)mods;
@@ -42,15 +44,17 @@ const char* vertexShaderSource = R"(
         triangleColorOutput = aCol;
     }
 )";
+
 const char* fragmentShaderSource = R"(
     #version 330 core
     out vec4 FragColor;
 
-    uniform float sinTime;
+    uniform float glfwTime;
     in vec3 triangleColorOutput;
 
     void main() {
-        FragColor = vec4(triangleColorOutput * sinTime, 1.0);
+        vec3 sinThingy = sin(glfwTime * vec3(4, 4.5, 5)) / 2 + 0.5;
+        FragColor = vec4(triangleColorOutput * pow(sinThingy, vec3(0.7)), 1.0);
     };
 )";
 
@@ -208,8 +212,7 @@ int main () {
         glUseProgram(shaderProgram);
 
         // vary the triangle's color using the uniform in the fragshader
-        float sinTime = sin((float)glfwGetTime() * 4) / 2 + 0.5;
-        glUniform1f(glGetUniformLocation(shaderProgram, "sinTime"), sinTime);
+        glUniform1f(glGetUniformLocation(shaderProgram, "glfwTime"), glfwGetTime());
 
         glBindVertexArray(rectangle_VAO);
         // glDrawArrays(GL_TRIANGLES, 0, 3); // draw 3 verts
