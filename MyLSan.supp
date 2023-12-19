@@ -1,3 +1,5 @@
-# if glfwCreateWindow leaks, that's not actually my fault lol
+# if glfwCreateWindow leaks (tysm linux nvidia drivers),
+# that's not actually my fault lol
+# https://github.com/google/sanitizers/wiki/AddressSanitizerLeakSanitizer#suppressions
 # https://clang.llvm.org/docs/AddressSanitizer.html#suppressing-memory-leaks
 leak:glfwCreateWindow
