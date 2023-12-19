@@ -1,3 +1,4 @@
+#include <math.h>
 #define GLFW_INCLUDE_NONE
 
 #include <iostream>
@@ -39,8 +40,12 @@ const char* vertexShaderSource = R"(
 const char* fragmentShaderSource = R"(
     #version 330 core
     out vec4 FragColor;
+
+    uniform vec4 triangleColor;
+
     void main() {
-        FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);
+        //FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);
+        FragColor = triangleColor;
     };
 )";
 
@@ -176,7 +181,7 @@ int main () {
     glDeleteShader(fragmentShader);
 
     // draw wireframe
-    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
     // render loop
     while(!glfwWindowShouldClose(window)) {
@@ -185,6 +190,11 @@ int main () {
 
         // install the shader program and draw stuffs
         glUseProgram(shaderProgram);
+
+        // vary the triangle's color using the uniform in the fragshader
+        float redAmount = sin((float)glfwGetTime() * 4) / 2 + 0.5;
+        glUniform4f(glGetUniformLocation(shaderProgram, "triangleColor"), redAmount, 0, 0, 0);
+
         glBindVertexArray(VAO);
         // glDrawArrays(GL_TRIANGLES, 0, 3); // draw 3 verts
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0); // draw using ebo
