@@ -142,7 +142,7 @@ int main () {
         leShaderProgram.use();
 
         // vary the triangle's color using the uniform in the fragshader
-        leShaderProgram.setFloat("glfwTime", glfwGetTime());
+        leShaderProgram.glUniform("glfwTime", (float)glfwGetTime());
 
         glBindVertexArray(rectangle_VAO);
         // glDrawArrays(GL_TRIANGLES, 0, 3); // draw 3 verts

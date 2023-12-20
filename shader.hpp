@@ -25,15 +25,25 @@ public:
     // use/activate the shader
     void use(); // operator() ?
 
-    // utility uniform functions
-    void setBool(const std::string& name, bool value) const;
-    void setInt(const std::string& name, int value) const;
-    void setFloat(const std::string& name, float value) const;
+    // glUniform setter,
+    // but like... is this really const??
+    template <typename T>
+    void glUniform(const GLchar* name, T value) const;
 
     ~Shader();
 };
 
 // TODO: move move all of these to a cpp file and remove inline
+
+template<>
+inline void Shader::glUniform<int>(const GLchar* name, int value) const {
+    glUniform1i(glGetUniformLocation(shaderID, name), value);
+}
+
+template<>
+inline void Shader::glUniform<float>(const GLchar* name, float value) const {
+    glUniform1f(glGetUniformLocation(shaderID, name), value);
+}
 
 inline Shader::Shader(const char* vertexPath, const char* fragmentPath) {
     //// 1. retrieve the vertex/fragment source code from filePath
@@ -97,24 +107,6 @@ inline Shader::Shader(const char* vertexPath, const char* fragmentPath) {
 // ------------------------------------------------------------------------
 inline void Shader::use() {
     glUseProgram(shaderID);
-}
-
-// TODO: template-ize these
-
-// utility uniform functions
-// ------------------------------------------------------------------------
-inline void Shader::setBool(const std::string &name, bool value) const {
-    glUniform1i(glGetUniformLocation(shaderID, name.c_str()), (int)value);
-}
-
-// ------------------------------------------------------------------------
-inline void Shader::setInt(const std::string &name, int value) const {
-    glUniform1i(glGetUniformLocation(shaderID, name.c_str()), value);
-}
-
-// ------------------------------------------------------------------------
-inline void Shader::setFloat(const std::string &name, float value) const {
-    glUniform1f(glGetUniformLocation(shaderID, name.c_str()), value);
 }
 
 inline void Shader::checkCompileErrors(uint shader, std::string type) {
