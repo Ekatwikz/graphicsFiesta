@@ -31,7 +31,7 @@ public:
     explicit Shader(const char* vertexPath, const char* fragmentPath);
 
     // use/activate the shader
-    void use(); // TODO: operator() ?
+    void glUseProgram();
 
     // glUniform setter,
     // but like... sould this really be const??
@@ -116,8 +116,9 @@ inline Shader::Shader(const char* vertexShaderPath, const char* fragmentShaderPa
 
 // activate the shader
 // ------------------------------------------------------------------------
-inline void Shader::use() {
-    glUseProgram(shaderID);
+inline void Shader::glUseProgram() {
+    // global namespace operator lol, never knew about this
+    ::glUseProgram(shaderID);
 }
 
 // TODO: noooooo, don't use strings

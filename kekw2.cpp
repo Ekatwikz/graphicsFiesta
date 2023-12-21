@@ -139,7 +139,7 @@ int main () {
         glClear(GL_COLOR_BUFFER_BIT);
 
         // install the shader program and draw stuffs
-        leShaderProgram.use();
+        leShaderProgram.glUseProgram();
 
         // vary the triangle's color using the uniform in the fragshader
         leShaderProgram.glUniform("glfwTime", (float)glfwGetTime());
