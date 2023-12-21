@@ -16,12 +16,25 @@
 #define TO_STR(s) #s
 #define X_TO_STR(X) TO_STR(X)
 
+// PROGRAM isn't reeeeally a type, but whatev?
+enum class ShaderType{ PROGRAM, VERTEX, FRAGMENT };
+
+// maybe conversion op would be better? idk
+inline auto operator<<(std::ostream& outputStream, ShaderType shaderStypeEnum)
+-> std::ostream& {
+    // basic way to convert these to strings,
+    // a fancier way would be:
+    // see: https://github.com/Neargye/magic_enum
+    constexpr char ShaderTypeNames[][9] = { "PROGRAM", "VERTEX", "FRAGMENT" };
+    return outputStream << ShaderTypeNames[static_cast<size_t>(shaderStypeEnum)];
+}
+
 // TODO: rename me to shader program??
 class Shader {
 private:
     // utility function for checking shader compilation/linking errors.
     // ------------------------------------------------------------------------
-    void checkCompileErrors(GLuint shader, std::string type);
+    auto checkCompileErrors(GLuint shader, ShaderType type);
 
 public:
     // the shader program's handler ID
@@ -31,12 +44,12 @@ public:
     explicit Shader(const char* vertexPath, const char* fragmentPath);
 
     // use/activate the shader
-    void glUseProgram();
+    auto glUseProgram();
 
     // glUniform setter,
     // but like... sould this really be const??
     template <typename T>
-    void glUniform(const GLchar* name, T value) const;
+    auto glUniform(const GLchar* name, T value) const;
 
     ~Shader();
 };
@@ -44,13 +57,42 @@ public:
 // TODO: move move all of these to a cpp file and remove inline
 
 template<>
-inline void Shader::glUniform<GLint>(const GLchar* name, GLint value) const {
+inline auto Shader::glUniform<GLint>(const GLchar* name, GLint value) const {
     glUniform1i(glGetUniformLocation(shaderID, name), value);
 }
 
 template<>
-inline void Shader::glUniform<GLfloat>(const GLchar* name, GLfloat value) const {
+inline auto Shader::glUniform<GLfloat>(const GLchar* name, GLfloat value) const {
     glUniform1f(glGetUniformLocation(shaderID, name), value);
+}
+
+// activate the shader
+// ------------------------------------------------------------------------
+inline auto Shader::glUseProgram() {
+    // global namespace operator lol, never knew about this
+    ::glUseProgram(shaderID);
+}
+
+inline auto Shader::checkCompileErrors(GLuint shader, ShaderType type) {
+    GLint compileStatus;
+
+    // TODO: store pointer during construction,
+    // realloc only if we need more, using GL_INFO_LOG_LENGTH?
+    GLchar infoLog[1024];
+
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &compileStatus);
+    if (GL_FALSE == compileStatus) {
+        glGetShaderInfoLog(shader, 1024, NULL, infoLog);
+
+        std::cerr << TO_STR(GL_COMPILE_STATUS)
+            << ": " << compileStatus
+            << " (==" TO_STR(GL_TRUE)
+            << "==" X_TO_STR(GL_TRUE) " expected) "
+
+            << "while compiling/linking: " << type << "\n"
+            << infoLog
+            << "===\n";
+    }
 }
 
 inline Shader::Shader(const char* vertexShaderPath, const char* fragmentShaderPath) {
@@ -71,12 +113,15 @@ inline Shader::Shader(const char* vertexShaderPath, const char* fragmentShaderPa
         vertexShaderFile.open(vertexShaderPath);
         fragmentShaderFile.open(fragmentShaderPath);
         std::stringstream vertexShaderStream, fragmentShaderStream;
+
         // read file's buffer contents into streams
         vertexShaderStream << vertexShaderFile.rdbuf();
         fragmentShaderStream << fragmentShaderFile.rdbuf();
+
         // close file handlers
         vertexShaderFile.close();
         fragmentShaderFile.close();
+
         // convert stream into string
         vertexCode = vertexShaderStream.str();
         fragmentCode = fragmentShaderStream.str();
@@ -94,55 +139,24 @@ inline Shader::Shader(const char* vertexShaderPath, const char* fragmentShaderPa
     vertex = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(vertex, 1, &vertexShaderCode, NULL);
     glCompileShader(vertex);
-    checkCompileErrors(vertex, "VERTEX");
+    checkCompileErrors(vertex, ShaderType::VERTEX);
 
     // fragment Shader
     fragment = glCreateShader(GL_FRAGMENT_SHADER);
     glShaderSource(fragment, 1, &fragmentShaderCode, nullptr);
     glCompileShader(fragment);
-    checkCompileErrors(fragment, "FRAGMENT");
+    checkCompileErrors(fragment, ShaderType::FRAGMENT);
 
     // shader Program
     shaderID = glCreateProgram();
     glAttachShader(shaderID, vertex);
     glAttachShader(shaderID, fragment);
     glLinkProgram(shaderID);
-    checkCompileErrors(shaderID, "PROGRAM"); // is this redundant tho??
+    checkCompileErrors(shaderID, ShaderType::PROGRAM); // is this redundant tho??
 
     // delete the shaders as they're linked into our program now and no longer necessary
     glDeleteShader(vertex);
     glDeleteShader(fragment);
-}
-
-// activate the shader
-// ------------------------------------------------------------------------
-inline void Shader::glUseProgram() {
-    // global namespace operator lol, never knew about this
-    ::glUseProgram(shaderID);
-}
-
-// TODO: noooooo, don't use strings
-// enums plis
-inline void Shader::checkCompileErrors(GLuint shader, std::string type) {
-    GLint compileStatus;
-
-    // TODO: store pointer during construction,
-    // realloc only if we need more, using GL_INFO_LOG_LENGTH?
-    GLchar infoLog[1024];
-
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &compileStatus);
-    if (GL_FALSE == compileStatus) {
-        glGetShaderInfoLog(shader, 1024, NULL, infoLog);
-
-        std::cerr << TO_STR(GL_COMPILE_STATUS)
-            << ": " << compileStatus
-            << " (==" TO_STR(GL_TRUE)
-            << "==" X_TO_STR(GL_TRUE) " expected) "
-
-            << "while compiling/linking: " << type << "\n"
-            << infoLog
-            << "===\n";
-    }
 }
 
 inline Shader::~Shader() {
