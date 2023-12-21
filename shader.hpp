@@ -1,23 +1,31 @@
 #ifndef SHADER_H
 #define SHADER_H
 
-#include <glad/glad.h> // include glad to get all the required OpenGL headers
+// include glad to get all the required OpenGL headers
+#include <glad/glad.h>
 
 #include <string>
 #include <fstream>
 #include <sstream>
 #include <iostream>
 
+// useful to force stringify stuffs
+// TODO: move me to a header or summink
+// see: https://gcc.gnu.org/onlinedocs/gcc-13.2.0/cpp/Stringizing.html
+// see: https://gcc.gnu.org/onlinedocs/gcc-13.2.0/cpp/Argument-Prescan.html
+#define TO_STR(s) #s
+#define X_TO_STR(X) TO_STR(X)
+
 // TODO: rename me to shader program??
 class Shader {
 private:
     // utility function for checking shader compilation/linking errors.
     // ------------------------------------------------------------------------
-    void checkCompileErrors(unsigned int shader, std::string type);
+    void checkCompileErrors(GLuint shader, std::string type);
 
 public:
     // the shader program's handler ID
-    uint shaderID;
+    GLuint shaderID;
 
     // constructor reads and builds the shader
     explicit Shader(const char* vertexPath, const char* fragmentPath);
@@ -36,12 +44,12 @@ public:
 // TODO: move move all of these to a cpp file and remove inline
 
 template<>
-inline void Shader::glUniform<int>(const GLchar* name, int value) const {
+inline void Shader::glUniform<GLint>(const GLchar* name, GLint value) const {
     glUniform1i(glGetUniformLocation(shaderID, name), value);
 }
 
 template<>
-inline void Shader::glUniform<float>(const GLchar* name, float value) const {
+inline void Shader::glUniform<GLfloat>(const GLchar* name, GLfloat value) const {
     glUniform1f(glGetUniformLocation(shaderID, name), value);
 }
 
@@ -99,7 +107,7 @@ inline Shader::Shader(const char* vertexShaderPath, const char* fragmentShaderPa
     glAttachShader(shaderID, vertex);
     glAttachShader(shaderID, fragment);
     glLinkProgram(shaderID);
-    checkCompileErrors(shaderID, "PROGRAM");
+    checkCompileErrors(shaderID, "PROGRAM"); // is this redundant tho??
 
     // delete the shaders as they're linked into our program now and no longer necessary
     glDeleteShader(vertex);
@@ -114,25 +122,25 @@ inline void Shader::use() {
 
 // TODO: noooooo, don't use strings
 // enums plis
-inline void Shader::checkCompileErrors(uint shader, std::string type) {
-    int success;
-    char infoLog[1024];
+inline void Shader::checkCompileErrors(GLuint shader, std::string type) {
+    GLint compileStatus;
 
-    // TODO: rearrange this cringe shit
-    if (type != "PROGRAM") {
-        glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
-        if (!success) {
-            glGetShaderInfoLog(shader, 1024, NULL, infoLog);
-            std::cout << "ERROR::SHADER_COMPILATION_ERROR of type: " << type << "\n" << infoLog <<
-                "\n -- --------------------------------------------------- -- \n";
-        }
-    } else {
-        glGetProgramiv(shader, GL_LINK_STATUS, &success);
-        if (!success) {
-            glGetProgramInfoLog(shader, 1024, NULL, infoLog);
-            std::cout << "ERROR::PROGRAM_LINKING_ERROR of type: " << type << "\n" << infoLog <<
-                "\n -- --------------------------------------------------- -- \n";
-        }
+    // TODO: store pointer during construction,
+    // realloc only if we need more, using GL_INFO_LOG_LENGTH?
+    GLchar infoLog[1024];
+
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &compileStatus);
+    if (GL_FALSE == compileStatus) {
+        glGetShaderInfoLog(shader, 1024, NULL, infoLog);
+
+        std::cerr << TO_STR(GL_COMPILE_STATUS)
+            << ": " << compileStatus
+            << " (==" TO_STR(GL_TRUE)
+            << "==" X_TO_STR(GL_TRUE) " expected) "
+
+            << "while compiling/linking: " << type << "\n"
+            << infoLog
+            << "===\n";
     }
 }
 
