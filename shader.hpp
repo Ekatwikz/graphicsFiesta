@@ -132,7 +132,7 @@ inline void Shader::checkCompileErrors(uint shader, std::string type) {
 }
 
 inline Shader::~Shader() {
-    std::cerr << "TODO!: desctruct\n";
+    glDeleteProgram(shaderID);
 }
 
 #endif
