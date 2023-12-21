@@ -4,7 +4,7 @@
 #include <iostream>
 #include <GLFW/glfw3.h>
 
-#include "./include/glad/glad.h"
+#include <glad/glad.h>
 #include "shader.hpp"
 
 // callbacks
@@ -145,7 +145,7 @@ auto main() -> int {
         leShaderProgram.glUniform("glfwTime", static_cast<float>(glfwGetTime()));
 
         glBindVertexArray(rectangle_VAO);
-        // glDrawArrays(GL_TRIANGLES, 0, 3); // draw 3 verts
+        //glDrawArrays(GL_TRIANGLES, 0, 3); // draw 3 verts
         glDrawElements(GL_TRIANGLES, sizeof(indices), GL_UNSIGNED_INT, nullptr); // draw using ebo
         glBindVertexArray(0); // unbind, no need to unbind it every time tho
 

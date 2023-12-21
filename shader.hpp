@@ -20,13 +20,18 @@
 enum class ShaderType{ PROGRAM, VERTEX, FRAGMENT };
 
 // maybe conversion op would be better? idk
-inline auto operator<<(std::ostream& outputStream, ShaderType shaderStypeEnum)
+static inline auto operator<<(std::ostream& outputStream, ShaderType shaderTypeEnum)
 -> std::ostream& {
-    // basic way to convert these to strings,
-    // a fancier way would be:
+    // basic way to display enumz
+    // a fancier way would be,
     // see: https://github.com/Neargye/magic_enum
-    constexpr char ShaderTypeNames[][9] { "PROGRAM", "VERTEX", "FRAGMENT" };
-    return outputStream << ShaderTypeNames[static_cast<int>(shaderStypeEnum)];
+    const char* ShaderTypeNames[] {
+        TO_STR(ShaderType::PROGRAM),
+        TO_STR(ShaderType::VERTEX),
+        TO_STR(ShaderType::FRAGMENT)
+    };
+
+    return outputStream << ShaderTypeNames[static_cast<size_t>(shaderTypeEnum)];
 }
 
 // TODO: rename me to shader program??
@@ -34,7 +39,7 @@ class Shader {
 private:
     // utility function for checking shader compilation/linking errors.
     // ------------------------------------------------------------------------
-    static auto checkCompileErrors(GLuint shader, ShaderType type);
+    static auto checkCompileErrors(GLuint shader, ShaderType shaderType);
 
 public:
     // the shader program's handler ID
@@ -78,26 +83,38 @@ inline auto Shader::glUseProgram() const {
     ::glUseProgram(shaderID);
 }
 
-inline auto Shader::checkCompileErrors(GLuint shader, ShaderType type) {
+inline auto Shader::checkCompileErrors(GLuint shader, ShaderType shaderType) {
     GLint compileStatus = 0;
+    if (ShaderType::PROGRAM == shaderType) {
+        glGetProgramiv(shader, GL_LINK_STATUS, &compileStatus);
+    } else {
+        glGetShaderiv(shader, GL_COMPILE_STATUS, &compileStatus);
+    }
+
+    if (GL_TRUE == compileStatus) {
+        return;
+    }
 
     // TODO: store pointer during construction,
     // realloc only if we need more, using GL_INFO_LOG_LENGTH?
-    GLchar infoLog[1024];
-
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &compileStatus);
-    if (GL_FALSE == compileStatus) {
-        glGetShaderInfoLog(shader, 1024, nullptr, static_cast<GLchar*>(infoLog));
-
-        std::cerr << TO_STR(GL_COMPILE_STATUS)
-            << ": " << compileStatus
-            << " (==" TO_STR(GL_TRUE)
-            << "==" X_TO_STR(GL_TRUE) " expected) "
-
-            << "while compiling/linking: " << type << "\n"
-            << infoLog
-            << "===\n";
+    GLchar infoLog[1024] = {0};
+    if (ShaderType::PROGRAM == shaderType) {
+        glGetProgramInfoLog(shader, sizeof(infoLog), nullptr, static_cast<GLchar*>(infoLog));
+    } else {
+        glGetShaderInfoLog(shader, sizeof(infoLog), nullptr, static_cast<GLchar*>(infoLog));
     }
+
+    std::cerr
+        << (ShaderType::PROGRAM == shaderType
+        ? TO_STR(GL_LINK_STATUS)
+        : TO_STR(GL_COMPILE_STATUS))
+        << ": " << compileStatus
+        << " (==" TO_STR(GL_TRUE)
+        << "==" X_TO_STR(GL_TRUE) " expected) "
+
+        << "while compiling/linking: " << shaderType << "\n"
+        << infoLog
+        << "===\n";
 }
 
 inline Shader::Shader(const char* vertexShaderPath, const char* fragmentShaderPath) {
