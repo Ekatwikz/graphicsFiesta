@@ -16,17 +16,17 @@ private:
     void checkCompileErrors(unsigned int shader, std::string type);
 
 public:
-    // the program ID
+    // the shader program's handler ID
     uint shaderID;
 
     // constructor reads and builds the shader
     explicit Shader(const char* vertexPath, const char* fragmentPath);
 
     // use/activate the shader
-    void use(); // operator() ?
+    void use(); // TODO: operator() ?
 
     // glUniform setter,
-    // but like... is this really const??
+    // but like... sould this really be const??
     template <typename T>
     void glUniform(const GLchar* name, T value) const;
 
@@ -45,30 +45,33 @@ inline void Shader::glUniform<float>(const GLchar* name, float value) const {
     glUniform1f(glGetUniformLocation(shaderID, name), value);
 }
 
-inline Shader::Shader(const char* vertexPath, const char* fragmentPath) {
+inline Shader::Shader(const char* vertexShaderPath, const char* fragmentShaderPath) {
     //// 1. retrieve the vertex/fragment source code from filePath
     std::string vertexCode;
     std::string fragmentCode;
-    std::ifstream vShaderFile;
-    std::ifstream fShaderFile;
+    std::ifstream vertexShaderFile;
+    std::ifstream fragmentShaderFile;
 
     // ensure ifstream objects can throw exceptions:
-    vShaderFile.exceptions (std::ifstream::failbit | std::ifstream::badbit);
-    fShaderFile.exceptions (std::ifstream::failbit | std::ifstream::badbit);
+    vertexShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+    fragmentShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+
+    // TODO: nah this is kinda gross, should probably separate these,
+    // since there's at least 2 completely separate causes for this to throw
     try {
         // open files
-        vShaderFile.open(vertexPath);
-        fShaderFile.open(fragmentPath);
-        std::stringstream vShaderStream, fShaderStream;
+        vertexShaderFile.open(vertexShaderPath);
+        fragmentShaderFile.open(fragmentShaderPath);
+        std::stringstream vertexShaderStream, fragmentShaderStream;
         // read file's buffer contents into streams
-        vShaderStream << vShaderFile.rdbuf();
-        fShaderStream << fShaderFile.rdbuf();
+        vertexShaderStream << vertexShaderFile.rdbuf();
+        fragmentShaderStream << fragmentShaderFile.rdbuf();
         // close file handlers
-        vShaderFile.close();
-        fShaderFile.close();
+        vertexShaderFile.close();
+        fragmentShaderFile.close();
         // convert stream into string
-        vertexCode = vShaderStream.str();
-        fragmentCode = fShaderStream.str();
+        vertexCode = vertexShaderStream.str();
+        fragmentCode = fragmentShaderStream.str();
     } catch (std::ifstream::failure& e) {
         std::cerr << "ERROR::SHADER::FILE_NOT_SUCCESSFULLY_READ: " << e.what() << "\n";
     }
@@ -109,6 +112,8 @@ inline void Shader::use() {
     glUseProgram(shaderID);
 }
 
+// TODO: noooooo, don't use strings
+// enums plis
 inline void Shader::checkCompileErrors(uint shader, std::string type) {
     int success;
     char infoLog[1024];
@@ -119,14 +124,14 @@ inline void Shader::checkCompileErrors(uint shader, std::string type) {
         if (!success) {
             glGetShaderInfoLog(shader, 1024, NULL, infoLog);
             std::cout << "ERROR::SHADER_COMPILATION_ERROR of type: " << type << "\n" << infoLog <<
-                "\n -- --------------------------------------------------- -- " << std::endl;
+                "\n -- --------------------------------------------------- -- \n";
         }
     } else {
         glGetProgramiv(shader, GL_LINK_STATUS, &success);
         if (!success) {
             glGetProgramInfoLog(shader, 1024, NULL, infoLog);
             std::cout << "ERROR::PROGRAM_LINKING_ERROR of type: " << type << "\n" << infoLog <<
-                "\n -- --------------------------------------------------- -- " << std::endl;
+                "\n -- --------------------------------------------------- -- \n";
         }
     }
 }
