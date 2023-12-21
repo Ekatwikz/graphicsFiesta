@@ -1,0 +1,3 @@
+Checks:                 'modernize-*, cppcoreguidelines-*, google-*, -google-readability-todo, readability-*, performance-*'
+WarningsAsErrors:       'modernize-*, cppcoreguidelines-*, google-*, -google-readability-todo, readability-*, performance-*'
+InheritParentConfig:    true
