@@ -21,14 +21,18 @@ class File {
     }
 
     // We basically Java now, sob emoji
-    auto getContent() -> std::string { return content; }
+    [[nodiscard]] auto getContent() const -> std::string { return content; }
 
-    auto getRawContent() -> const char* { return rawContent; }
+    [[nodiscard]] auto getRawContent() const -> const char* {
+        return rawContent;
+    }
 
     // this one's for the annoying functions
     // that expect string[],
     // even tho the array could be length 1?
-    auto getRawContentP() -> const char** { return &rawContent; }
+    [[nodiscard]] auto getRawContentP() const -> const char* const* {
+        return &rawContent;
+    }
 
    private:
     std::string path;
