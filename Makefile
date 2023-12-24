@@ -45,20 +45,27 @@ ifndef VERBOSE
 .SILENT:
 endif
 
+# https://stackoverflow.com/a/74742720
+define print_step
+	$(eval $@_MAINREQ = $(1))
+	$(eval $@_TARGET = $(2))
+	printf "=== %s -> %s ===\n" '${$@_MAINREQ}' '${$@_TARGET}'
+endef
+
 $(OBJECTDIR)/%.o: $(LIBDIR)/%.cpp $(LIBHEADERS)
 	mkdir -pv $(OBJECTDIR)
-	printf "=== %s -> %s ===\n" "$<" "$@"
+	$(call print_step,$<,$@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(GLADOBJECTDIR)/%.o: $(GLADSOURCEDIR)/%.c
 	mkdir -pv $(GLADOBJECTDIR)
-	printf "=== %s -> %s ===\n" "$<" "$@"
+	$(call print_step,$<,$@)
 	$(CC) $(CCFLAGS) -Wno-pedantic -c $< -o $@
 
 all: $(DEFAULTTARGETS)
 $(OUTPUTDIR)/%$(EXTENSION): $(SOURCEDIR)/%.cpp $(OBJECTS) $(GLADOBJECTS) $(LIBHEADERS)
 	mkdir -pv $(OUTPUTDIR)
-	printf "=== %s -> %s ===\n" "$<" "$@"
+	$(call print_step,$<,$@)
 	$(CXX) $(CXXFLAGS) $(OBJECTS) $(GLADOBJECTS) $< -o $@ $(LDFLAGS)
 
 # nukes are simpler than surgeries:
