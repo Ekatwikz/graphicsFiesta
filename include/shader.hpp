@@ -3,10 +3,6 @@
 
 // include glad to get all the required OpenGL headers
 #include <glad/glad.h>
-
-#include <string>
-#include <fstream>
-#include <sstream>
 #include <iostream>
 
 #include "tinyHelpers.h"
@@ -17,18 +13,7 @@ enum class ShaderType{ PROGRAM, VERTEX, FRAGMENT };
 
 // TODO: rename me to shader program??
 class Shader {
-private:
-    // utility function for checking shader compilation/linking errors.
-    // ------------------------------------------------------------------------
-    static auto checkCompileErrors(GLuint shader, ShaderType shaderType) -> void;
-
 public:
-    // the shader program's handler ID
-    GLuint shaderID;
-
-    // constructor reads and builds the shader
-    explicit Shader(const char* vertexShaderPath, const char* fragmentShaderPath);
-
     // use/activate the shader
     auto glUseProgram() const -> void;
 
@@ -37,12 +22,22 @@ public:
     template <typename T>
     auto glUniform(const GLchar* name, T value) const -> void;
 
+    // constructor reads and builds the shader
+    explicit Shader(const char* vertexShaderPath, const char* fragmentShaderPath);
+
     // no move, no copy, xdd
     Shader(const Shader&) = delete;
     Shader(Shader&&) = delete;
     auto operator=(const Shader&) -> Shader& = delete;
     auto operator=(Shader&&) -> Shader& = delete;
     ~Shader();
+
+private:
+    // the shader program's handler ID
+    GLuint shaderID;
+
+    // utility function for checking shader compilation/linking errors.
+    static auto checkCompileErrors(GLuint shader, ShaderType shaderType) -> void;
 };
 
 // maybe conversion op would be better? idk

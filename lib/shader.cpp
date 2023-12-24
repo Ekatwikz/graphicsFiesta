@@ -1,56 +1,85 @@
+#include <string>
+#include <fstream>
+#include <sstream>
+
 #include "shader.hpp"
 
-Shader::Shader(const char* vertexShaderPath, const char* fragmentShaderPath) {
-    //// 1. retrieve the vertex/fragment source code from filePath
-    std::string vertexCode;
-    std::string fragmentCode;
-    std::ifstream vertexShaderFile;
-    std::ifstream fragmentShaderFile;
-
-    // ensure ifstream objects can throw exceptions:
-    vertexShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-    fragmentShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-
-    // TODO: nah this is kinda gross, should probably separate these,
-    // since there's at least 2 completely separate causes for this to throw
-    try {
-        // open files
-        vertexShaderFile.open(vertexShaderPath);
-        fragmentShaderFile.open(fragmentShaderPath);
-        std::stringstream vertexShaderStream;
-        std::stringstream fragmentShaderStream;
-
-        // read file's buffer contents into streams
-        vertexShaderStream << vertexShaderFile.rdbuf();
-        fragmentShaderStream << fragmentShaderFile.rdbuf();
-
-        // close file handlers
-        vertexShaderFile.close();
-        fragmentShaderFile.close();
-
-        // convert stream into string
-        vertexCode = vertexShaderStream.str();
-        fragmentCode = fragmentShaderStream.str();
-    } catch (std::ifstream::failure& e) {
-        std::cerr << "ERROR::SHADER::FILE_NOT_SUCCESSFULLY_READ: " << e.what() << "\n";
+class File {
+public:
+    static auto getContentFromPath(const std::string& filePath) -> std::string;
+    auto updateFromPath() {
+        content = getContentFromPath(path);
     }
 
-    const char* vertexShaderCode = vertexCode.c_str();
-    const char* fragmentShaderCode = fragmentCode.c_str();
+    explicit File(std::string path_) : path{std::move(path_)}, content{getContentFromPath(path)}, rawContent{content.c_str()} { }
+    explicit File() = default;
 
-    //// 2. compile shaders
-    unsigned int vertex = 0;
-    unsigned int fragment = 0;
+    friend auto operator<<(std::ostream& outputStream, const File& file) -> std::ostream& {
+        return outputStream << file.content;
+    }
+
+    // We basically Java now, sob emoji
+    auto getContent() -> std::string {
+        return content;
+    }
+
+    auto getRawContent() -> const char* {
+        return rawContent;
+    }
+
+    // this one's for the annoying functions
+    // that expect string[],
+    // even tho the array could be length 1?
+    auto getRawContentP() -> const char** {
+        return &rawContent;
+    }
+
+private:
+    std::string path;
+    std::string content;
+    const char* rawContent = nullptr;
+};
+
+inline auto File::getContentFromPath(const std::string& filePath) -> std::string {
+    std::ifstream fileStream;
+
+    // ensure ifstream objects can throw exceptions:
+    // but like... is this even the best way to go really???
+    fileStream.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+    fileStream.open(filePath);
+
+    std::stringstream fileContentStream;
+    fileContentStream << fileStream.rdbuf();
+
+    return fileContentStream.str();
+}
+
+Shader::Shader(const char* vertexShaderPath, const char* fragmentShaderPath) {
+    File vertexShader;
+    try {
+        vertexShader = File{vertexShaderPath};
+    } catch(std::ifstream::failure& ex) {
+        std::cerr << "Oops! Couldn't create File for vertex shader\n"
+            << ex.what() << "\n===\n";
+    }
+
+    File fragmentShader;
+    try {
+        fragmentShader = File{fragmentShaderPath};
+    } catch(std::ifstream::failure& ex) {
+        std::cerr << "Oops! Couldn't create File for fragment shader\n"
+            << ex.what() << "\n===\n";
+    }
 
     // vertex shader
-    vertex = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertex, 1, &vertexShaderCode, nullptr);
+    uint vertex = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertex, 1, vertexShader.getRawContentP(), nullptr);
     glCompileShader(vertex);
     checkCompileErrors(vertex, ShaderType::VERTEX);
 
     // fragment Shader
-    fragment = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragment, 1, &fragmentShaderCode, nullptr);
+    uint fragment = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragment, 1, fragmentShader.getRawContentP(), nullptr);
     glCompileShader(fragment);
     checkCompileErrors(fragment, ShaderType::FRAGMENT);
 
@@ -101,7 +130,7 @@ auto Shader::checkCompileErrors(GLuint shader, ShaderType shaderType) -> void {
 
         << "while compiling/linking: " << shaderType << "\n"
         << infoLog
-        << "===\n";
+        << "\n===\n";
 }
 
 auto Shader::glUseProgram() const -> void {
