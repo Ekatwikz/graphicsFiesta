@@ -1,10 +1,11 @@
 #define GLFW_INCLUDE_NONE
 
+#include <GLFW/glfw3.h>
+#include <glad/glad.h>
+
 #include <cmath>
 #include <iostream>
-#include <GLFW/glfw3.h>
 
-#include <glad/glad.h>
 #include "shader.hpp"
 
 // callbacks
@@ -19,7 +20,8 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
 }
 
-void key_handler(GLFWwindow* window, int key, int scancode, int action, int mods) {
+void key_handler(GLFWwindow* window, int key, int scancode, int action,
+                 int mods) {
     (void)scancode;
     (void)mods;
 
@@ -51,7 +53,8 @@ auto main() -> int {
 
     // create a window and context, check for errors,
     // make this window current
-    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "IM GLing LESSGOOO", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(
+        SCR_WIDTH, SCR_HEIGHT, "IM GLing LESSGOOO", nullptr, nullptr);
     if (window == nullptr) {
         std::cerr << "Failed to create GLFW window" << std::endl;
         glfwTerminate();
@@ -60,7 +63,8 @@ auto main() -> int {
     glfwMakeContextCurrent(window);
 
     // init the glad loader or something, not sure
-    if (gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress)) == 0) {
+    if (gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress)) ==
+        0) {
         std::cerr << "Failed to initialize GLAD" << std::endl;
         return 1;
     }
@@ -73,22 +77,23 @@ auto main() -> int {
     glfwSetKeyCallback(window, key_handler);
 
     float positions[] = {
-        0.5F,  0.5F, 0.0F,  // top right
-        0.5F, -0.5F, 0.0F,  // bottom right
+        0.5F,  0.5F,  0.0F,  // top right
+        0.5F,  -0.5F, 0.0F,  // bottom right
         -0.5F, -0.5F, 0.0F,  // bottom left
-        -0.5F,  0.5F, 0.0F   // top left 
+        -0.5F, 0.5F,  0.0F   // top left
     };
 
     float colors[] = {
-        1.0F,  0.0F, 0.0F,  // top right
-        0.0F,  1.0F, 0.0F,  // top right
-        0.0F,  0.0F, 1.0F,  // top right
-        1.0F,  1.0F, 1.0F  // top right
+        1.0F, 0.0F, 0.0F,  // top right
+        0.0F, 1.0F, 0.0F,  // top right
+        0.0F, 0.0F, 1.0F,  // top right
+        1.0F, 1.0F, 1.0F   // top right
     };
 
-    uint indices[] = {  // note that we start from 0!
-        0, 1, 3,   // first triangle
-        1, 2, 3    // second triangle
+    uint indices[] = {
+        // note that we start from 0!
+        0, 1, 3,  // first triangle
+        1, 2, 3   // second triangle
     };
 
     // setup and bind vertex array object
@@ -101,7 +106,8 @@ auto main() -> int {
     uint rectangle_positions_VBO = 0;
     glGenBuffers(1, &rectangle_positions_VBO);
     glBindBuffer(GL_ARRAY_BUFFER, rectangle_positions_VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(positions), static_cast<GLvoid*>(positions), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(positions),
+                 static_cast<GLvoid*>(positions), GL_STATIC_DRAW);
 
     // define the location and format of the vertex position attribute,
     // index=0, b/c we said location=0
@@ -115,7 +121,8 @@ auto main() -> int {
     uint rectangle_colors_VBO = 0;
     glGenBuffers(1, &rectangle_colors_VBO);
     glBindBuffer(GL_ARRAY_BUFFER, rectangle_colors_VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(positions), static_cast<GLvoid*>(colors), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(positions),
+                 static_cast<GLvoid*>(colors), GL_STATIC_DRAW);
 
     // similar format for the colors
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
@@ -124,7 +131,8 @@ auto main() -> int {
     uint rectangle_points_EBO = 0;
     glGenBuffers(1, &rectangle_points_EBO);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, rectangle_points_EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), static_cast<GLvoid*>(indices), GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices),
+                 static_cast<GLvoid*>(indices), GL_STATIC_DRAW);
 
     // enable the vertex attrib arrays?
     glEnableVertexAttribArray(0);
@@ -134,7 +142,7 @@ auto main() -> int {
     Shader leShaderProgram{"./shaders/vertex.glsl", "./shaders/fragment.glsl"};
 
     // render loop
-    while(glfwWindowShouldClose(window) == 0) {
+    while (glfwWindowShouldClose(window) == 0) {
         glClearColor(0.2F, 0.3F, 0.3F, 1.0F);
         glClear(GL_COLOR_BUFFER_BIT);
 
@@ -142,12 +150,14 @@ auto main() -> int {
         leShaderProgram.glUseProgram();
 
         // vary the shape's color using the uniform in the fragshader
-        leShaderProgram.glUniform("glfwTime", static_cast<float>(glfwGetTime()));
+        leShaderProgram.glUniform("glfwTime",
+                                  static_cast<float>(glfwGetTime()));
 
         glBindVertexArray(rectangle_VAO);
-        //glDrawArrays(GL_TRIANGLES, 0, 3); // draw 3 verts
-        glDrawElements(GL_TRIANGLES, sizeof(indices), GL_UNSIGNED_INT, nullptr); // draw using ebo
-        glBindVertexArray(0); // unbind, no need to unbind it every time tho
+        // glDrawArrays(GL_TRIANGLES, 0, 3); // draw 3 verts
+        glDrawElements(GL_TRIANGLES, sizeof(indices), GL_UNSIGNED_INT,
+                       nullptr);  // draw using ebo
+        glBindVertexArray(0);     // unbind, no need to unbind it every time tho
 
         glfwSwapBuffers(window);
         glfwPollEvents();
