@@ -10,8 +10,6 @@ auto Shader::glUniform<GLfloat>(const GLchar* name, GLfloat value) const -> void
     glUniform1f(glGetUniformLocation(shaderID, name), value);
 }
 
-// activate the shader
-// ------------------------------------------------------------------------
 auto Shader::glUseProgram() const -> void {
     // global namespace operator lul
     ::glUseProgram(shaderID);

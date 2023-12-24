@@ -19,7 +19,7 @@ override DEBUGFLAGS:=-g3 -O0 $(DEBUGFLAGS)
 FFLAGS:=no-omit-frame-pointer
 STANDARD:=c++20
 
-# would need to be change for windows or something ig
+# would need to be changed for windows or something ig
 FFLAGS+=sanitize=address,undefined
 EXTENSION:=
 
