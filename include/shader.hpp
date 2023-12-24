@@ -20,7 +20,7 @@ class Shader {
 private:
     // utility function for checking shader compilation/linking errors.
     // ------------------------------------------------------------------------
-    static auto checkCompileErrors(GLuint shader, ShaderType shaderType);
+    static auto checkCompileErrors(GLuint shader, ShaderType shaderType) -> void;
 
 public:
     // the shader program's handler ID
