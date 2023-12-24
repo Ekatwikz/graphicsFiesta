@@ -141,7 +141,7 @@ auto main() -> int {
         // install the shader program and draw stuffs
         leShaderProgram.glUseProgram();
 
-        // vary the triangle's color using the uniform in the fragshader
+        // vary the shape's color using the uniform in the fragshader
         leShaderProgram.glUniform("glfwTime", static_cast<float>(glfwGetTime()));
 
         glBindVertexArray(rectangle_VAO);
