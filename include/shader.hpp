@@ -56,4 +56,4 @@ static inline auto operator<<(std::ostream& outputStream,
     return outputStream << ShaderTypeNames[static_cast<size_t>(shaderTypeEnum)];
 }
 
-#endif
+#endif  // SHADER_H
