@@ -11,20 +11,21 @@
 // TODO?: move this into the Shader class? idk
 // PROGRAM isn't reeeeally a type, but whatev?
 enum class ShaderType { PROGRAM, VERTEX, FRAGMENT };
+static inline auto operator<<(std::ostream& outputStream,
+                              ShaderType shaderTypeEnum) -> std::ostream&;
 
 class ShaderEntity {
-private:
-   GLuint shaderID;
-
 public:
    // compiles/links the shader/program
    virtual auto setup() const -> void = 0;
 
    // helper function for checking shader compilation/linking errors.
    // TODO: change this to return a string
-   auto checkBuildErrors() const -> void;
+   auto displaySetupErrors() const -> void;
 
-   [[nodiscard]] virtual auto glGetiv() const -> GLuint = 0;
+   // checks if last compile/link was successful
+   [[nodiscard]] virtual auto glGetSetupiv() const -> GLint = 0;
+
    [[nodiscard]] virtual auto glGetInfoLog() const -> std::string = 0;
 
    [[nodiscard]] auto getShaderID() const -> GLuint { return shaderID; }
@@ -36,46 +37,29 @@ public:
 
    // hmm
    virtual ~ShaderEntity() = 0;
+
+private:
+   GLuint shaderID;
 };
 
-auto ShaderEntity::checkBuildErrors() const -> void {
-   ShaderType shaderType = ShaderType::PROGRAM; // TMP!!! just for compilation stuffs
-
-   GLint compileStatus = 0;
-   if (ShaderType::PROGRAM == shaderType) {
-      glGetProgramiv(shaderID, GL_LINK_STATUS, &compileStatus);
-   } else {
-      glGetShaderiv(shaderID, GL_COMPILE_STATUS, &compileStatus);
-   }
-
-   if (GL_TRUE == compileStatus) {
+inline auto ShaderEntity::displaySetupErrors() const -> void {
+   GLint buildStatus = glGetSetupiv();
+   if (GL_TRUE == buildStatus) {
       return;
    }
 
-   // TODO: store pointer during construction,
-   // realloc only if we need more, using GL_INFO_LOG_LENGTH?
-   GLchar infoLog[1024] = {0};
-   if (ShaderType::PROGRAM == shaderType) {
-      glGetProgramInfoLog(shaderID, sizeof(infoLog), nullptr,
-                          static_cast<GLchar*>(infoLog));
-   } else {
-      glGetShaderInfoLog(shaderID, sizeof(infoLog), nullptr,
-                         static_cast<GLchar*>(infoLog));
-   }
-
-   std::cerr << (ShaderType::PROGRAM == shaderType ? TO_STR(GL_LINK_STATUS)
-      : TO_STR(GL_COMPILE_STATUS))
-      << ": " << compileStatus << " (==" TO_STR(GL_TRUE)
+   std::string infoLog = glGetInfoLog();
+   std::cerr << "Shader Setup Status: " << buildStatus << " (==" TO_STR(GL_TRUE)
       << "==" X_TO_STR(GL_TRUE) " expected) "
 
-      << "while compiling/linking: " << shaderType << "\n"
+      << "while compiling/linking: " << typeid(this).name() << "\n"
       << infoLog << "\n===\n";
 }
 
 // TODO: rename me to shader program??
 class Shader {
    public:
-    // use/activate the shader
+    // use/activate the shader program
     auto glUseProgram() const -> void;
 
     // glUniform setter,
