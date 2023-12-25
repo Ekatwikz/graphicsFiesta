@@ -39,10 +39,11 @@ class ShaderEntity {
     ShaderEntity() = default;
     virtual ~ShaderEntity() = 0;
 
-    ShaderEntity(const ShaderEntity&) = default;
+    // only move construct-ible? idk for now
+    ShaderEntity(const ShaderEntity&) = delete;
     ShaderEntity(ShaderEntity&&) = default;
-    auto operator=(const ShaderEntity&) -> ShaderEntity& = default;
-    auto operator=(ShaderEntity&&) -> ShaderEntity& = default;
+    auto operator=(const ShaderEntity&) -> ShaderEntity& = delete;
+    auto operator=(ShaderEntity&&) -> ShaderEntity& = delete;
 
    protected:
     auto setID(GLuint ID_) { ID = ID_; }
