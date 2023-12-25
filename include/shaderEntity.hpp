@@ -6,12 +6,19 @@
 
 #include <iostream>
 
+// print time when something errors out
+// could be useful...?
+#ifndef NO_DEBUG_TIMESTAMP
+#include <chrono>
+#include <ctime>
+#endif
+
 #include "tinyHelpers.h"
 
 class ShaderEntity {
    public:
     // compiles/links the shader/program
-    // virtual auto setup() const -> void = 0;
+    virtual auto setup() const -> void = 0;
 
     // helper function for checking shader compilation/linking errors.
     // TODO: change this to return a string
@@ -33,9 +40,9 @@ class ShaderEntity {
     virtual ~ShaderEntity() = 0;
 
     ShaderEntity(const ShaderEntity&) = default;
-    ShaderEntity(ShaderEntity&&) = delete;
+    ShaderEntity(ShaderEntity&&) = default;
     auto operator=(const ShaderEntity&) -> ShaderEntity& = default;
-    auto operator=(ShaderEntity&&) -> ShaderEntity& = delete;
+    auto operator=(ShaderEntity&&) -> ShaderEntity& = default;
 
    protected:
     auto setID(GLuint ID_) { ID = ID_; }
@@ -53,11 +60,16 @@ inline auto ShaderEntity::displaySetupErrors() const -> void {
         return;
     }
 
+#ifndef NO_DEBUG_TIMESTAMP
+    auto currentTime = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    std::cerr << std::ctime(&currentTime);
+#endif
+
     std::string shaderName = getName();
-    std::cerr << shaderName << "::" TO_STR(glGetSetupiv) ": -> " << setupiv
+    std::cerr << shaderName << "::" TO_STR(glGetSetupiv) " -> " << setupiv
               << " (expected: -> " TO_STR(GL_TRUE) " (== " X_TO_STR(
                      GL_TRUE) "))\n"
-              << shaderName << "::" TO_STR(glGetInfoLog) ": \""
+              << shaderName << "::" TO_STR(glGetInfoLog) " -> \""
               << glGetInfoLog() << "\"\n===\n";
 }
 

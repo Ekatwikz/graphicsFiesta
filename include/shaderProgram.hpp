@@ -5,6 +5,8 @@
 
 class ShaderProgram : ShaderEntity {
    public:
+    auto setup() const -> void override;
+
     // use/activate the shader program
     auto glUseProgram() const -> void;
 
@@ -31,25 +33,7 @@ class ShaderProgram : ShaderEntity {
     auto operator=(const ShaderProgram&) -> ShaderProgram& = delete;
     auto operator=(ShaderProgram&&) -> ShaderProgram& = delete;
 
-    ~ShaderProgram() override;
+    ~ShaderProgram() override { glDeleteProgram(getID()); }
 };
-
-// TODO: DELETE ME!!
-enum class ShaderType { PROGRAM, VERTEX, FRAGMENT };
-static inline auto operator<<(std::ostream& outputStream,
-                              ShaderType shaderTypeEnum) -> std::ostream&;
-
-// maybe conversion op would be better? idk
-static inline auto operator<<(std::ostream& outputStream,
-                              ShaderType shaderTypeEnum) -> std::ostream& {
-    // basic way to display enumz
-    // a fancier way would be,
-    // see: https://github.com/Neargye/magic_enum
-    const char* ShaderTypeNames[]{TO_STR(ShaderType::PROGRAM),
-                                  TO_STR(ShaderType::VERTEX),
-                                  TO_STR(ShaderType::FRAGMENT)};
-
-    return outputStream << ShaderTypeNames[static_cast<size_t>(shaderTypeEnum)];
-}
 
 #endif  // SHADER_H
