@@ -19,7 +19,7 @@ class Shader {
     auto glUseProgram() const -> void;
 
     // glUniform setter,
-    // but like... sould this really be const??
+    // but like... should this really be const??
     template <typename T>
     auto glUniform(const GLchar* name, T value) const -> void;
 
@@ -56,4 +56,4 @@ static inline auto operator<<(std::ostream& outputStream,
     return outputStream << ShaderTypeNames[static_cast<size_t>(shaderTypeEnum)];
 }
 
-#endif  // SHADER_H
+#endif // SHADER_H

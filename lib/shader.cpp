@@ -35,6 +35,7 @@ Shader::Shader(const char* vertexShaderPath, const char* fragmentShaderPath) {
     shaderID = glCreateProgram();
     glAttachShader(shaderID, vertex);
     glAttachShader(shaderID, fragment);
+
     glLinkProgram(shaderID);
     checkCompileErrors(shaderID, ShaderType::PROGRAM);
 
@@ -45,6 +46,22 @@ Shader::Shader(const char* vertexShaderPath, const char* fragmentShaderPath) {
 }
 
 Shader::~Shader() { glDeleteProgram(shaderID); }
+
+auto Shader::glUseProgram() const -> void {
+    // global namespace operator lul
+    ::glUseProgram(shaderID);
+}
+
+template <>
+auto Shader::glUniform<GLint>(const GLchar* name, GLint value) const -> void {
+    glUniform1i(glGetUniformLocation(shaderID, name), value);
+}
+
+template <>
+auto Shader::glUniform<GLfloat>(const GLchar* name, GLfloat value) const
+    -> void {
+    glUniform1f(glGetUniformLocation(shaderID, name), value);
+}
 
 auto Shader::checkCompileErrors(GLuint shader, ShaderType shaderType) -> void {
     GLint compileStatus = 0;
@@ -76,20 +93,4 @@ auto Shader::checkCompileErrors(GLuint shader, ShaderType shaderType) -> void {
 
               << "while compiling/linking: " << shaderType << "\n"
               << infoLog << "\n===\n";
-}
-
-auto Shader::glUseProgram() const -> void {
-    // global namespace operator lul
-    ::glUseProgram(shaderID);
-}
-
-template <>
-auto Shader::glUniform<GLint>(const GLchar* name, GLint value) const -> void {
-    glUniform1i(glGetUniformLocation(shaderID, name), value);
-}
-
-template <>
-auto Shader::glUniform<GLfloat>(const GLchar* name, GLfloat value) const
-    -> void {
-    glUniform1f(glGetUniformLocation(shaderID, name), value);
 }
