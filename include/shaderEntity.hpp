@@ -1,5 +1,5 @@
-#ifndef SHADER_ENTITY
-#define SHADER_ENTITY
+#ifndef SHADER_ENTITY_HPP
+#define SHADER_ENTITY_HPP
 
 // include glad to get all the required OpenGL headers
 #include <glad/glad.h>
@@ -74,4 +74,4 @@ inline auto ShaderEntity::displaySetupErrors() const -> void {
               << glGetInfoLog() << "\"\n===\n";
 }
 
-#endif  // !SHADER_ENTITY
+#endif // SHADER_ENTITY_HPP

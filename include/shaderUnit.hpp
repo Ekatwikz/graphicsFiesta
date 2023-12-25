@@ -1,5 +1,5 @@
-#ifndef SHADER_UNIT
-#define SHADER_UNIT
+#ifndef SHADER_UNIT_HPP
+#define SHADER_UNIT_HPP
 
 #include "shaderEntity.hpp"
 #include "file.hpp"
@@ -65,4 +65,4 @@ inline auto ShaderUnit<SHADER_TYPE>::glGetInfoLog() const -> std::string {
     return infoLog;
 }
 
-#endif // SHADER_UNIT
+#endif // SHADER_UNIT_HPP

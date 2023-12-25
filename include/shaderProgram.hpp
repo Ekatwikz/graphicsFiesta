@@ -1,5 +1,5 @@
-#ifndef SHADER_H
-#define SHADER_H
+#ifndef SHADER_PROGRAM_HPP
+#define SHADER_PROGRAM_HPP
 
 #include "shaderEntity.hpp"
 
@@ -36,4 +36,4 @@ class ShaderProgram : ShaderEntity {
     ~ShaderProgram() override { glDeleteProgram(getID()); }
 };
 
-#endif  // SHADER_H
+#endif // SHADER_PROGRAM_HPP
