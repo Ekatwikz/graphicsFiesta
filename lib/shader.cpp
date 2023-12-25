@@ -7,7 +7,7 @@ Shader::Shader(const char* vertexShaderPath, const char* fragmentShaderPath) {
     try {
         vertexShader = File{vertexShaderPath};
     } catch (std::ifstream::failure& ex) {
-        std::cerr << "Oops! Couldn't create File for vertex shader\n"
+        std::cerr << "Oops! IO exception when constructing vertex shader\n"
                   << ex.what() << "\n===\n";
     }
 
@@ -15,7 +15,7 @@ Shader::Shader(const char* vertexShaderPath, const char* fragmentShaderPath) {
     try {
         fragmentShader = File{fragmentShaderPath};
     } catch (std::ifstream::failure& ex) {
-        std::cerr << "Oops! Couldn't create File for fragment shader\n"
+        std::cerr << "Oops! IO exception when constructing fragment shader\n"
                   << ex.what() << "\n===\n";
     }
 
