@@ -8,16 +8,10 @@
 
 #include "tinyHelpers.h"
 
-// TODO?: move this into the Shader class? idk
-// PROGRAM isn't reeeeally a type, but whatev?
-enum class ShaderType { PROGRAM, VERTEX, FRAGMENT };
-static inline auto operator<<(std::ostream& outputStream,
-                              ShaderType shaderTypeEnum) -> std::ostream&;
-
 class ShaderEntity {
 public:
    // compiles/links the shader/program
-   virtual auto setup() const -> void = 0;
+   //virtual auto setup() const -> void = 0;
 
    // helper function for checking shader compilation/linking errors.
    // TODO: change this to return a string
@@ -28,19 +22,30 @@ public:
 
    [[nodiscard]] virtual auto glGetInfoLog() const -> std::string = 0;
 
-   [[nodiscard]] auto getShaderID() const -> GLuint { return shaderID; }
+   [[nodiscard]] auto getID() const { return ID; }
+
+   // for printing errors n stuff ig
+   // would be better with some reflection maybe?
+   [[nodiscard]] virtual auto getName() const -> std::string = 0;
+
+   // hmm
+   ShaderEntity() = default;
+   virtual ~ShaderEntity() = 0;
 
    ShaderEntity(const ShaderEntity&) = default;
    ShaderEntity(ShaderEntity&&) = delete;
    auto operator=(const ShaderEntity&) -> ShaderEntity& = default;
    auto operator=(ShaderEntity&&) -> ShaderEntity& = delete;
 
-   // hmm
-   virtual ~ShaderEntity() = 0;
+protected:
+   auto setID(GLuint ID_) { ID = ID_; }
 
 private:
-   GLuint shaderID;
+   GLuint ID = 0;
 };
+
+// bruhhh what
+inline ShaderEntity::~ShaderEntity() = default;
 
 inline auto ShaderEntity::displaySetupErrors() const -> void {
    GLint buildStatus = glGetSetupiv();
@@ -48,16 +53,15 @@ inline auto ShaderEntity::displaySetupErrors() const -> void {
       return;
    }
 
-   std::string infoLog = glGetInfoLog();
-   std::cerr << "Shader Setup Status: " << buildStatus << " (==" TO_STR(GL_TRUE)
-      << "==" X_TO_STR(GL_TRUE) " expected) "
-
-      << "while compiling/linking: " << typeid(this).name() << "\n"
-      << infoLog << "\n===\n";
+   std::string shaderName = getName();
+   std::cerr << shaderName << "::" TO_STR(glGetSetupiv) ": -> " << buildStatus
+      << " (expected: -> " TO_STR(GL_TRUE) " (== " X_TO_STR(GL_TRUE) "))\n"
+      << shaderName << "::" TO_STR(glGetInfoLog) ": \""
+      << glGetInfoLog() << "\"\n===\n";
 }
 
 // TODO: rename me to shader program??
-class Shader {
+class ShaderProgram : ShaderEntity {
    public:
     // use/activate the shader program
     auto glUseProgram() const -> void;
@@ -68,24 +72,28 @@ class Shader {
     auto glUniform(const GLchar* name, T value) const -> void;
 
     // constructor reads and builds the shader
-    explicit Shader(const char* vertexShaderPath,
+   // TODO: don't do it like this lol
+    explicit ShaderProgram(const char* vertexShaderPath,
                     const char* fragmentShaderPath);
 
+   // base class stuffs
+   [[nodiscard]] auto glGetSetupiv() const -> GLint override;
+   [[nodiscard]] auto glGetInfoLog() const -> std::string override;
+   [[nodiscard]] auto getName() const -> std::string override { return typeid(this).name(); };
+
     // no move, no copy, xdd
-    Shader(const Shader&) = delete;
-    Shader(Shader&&) = delete;
-    auto operator=(const Shader&) -> Shader& = delete;
-    auto operator=(Shader&&) -> Shader& = delete;
-    ~Shader();
+    ShaderProgram(const ShaderProgram&) = delete;
+    ShaderProgram(ShaderProgram&&) = delete;
+    auto operator=(const ShaderProgram&) -> ShaderProgram& = delete;
+    auto operator=(ShaderProgram&&) -> ShaderProgram& = delete;
 
-   private:
-    // the shader program's handler ID
-    GLuint shaderID;
-
-    // utility function for checking shader compilation/linking errors.
-    static auto checkCompileErrors(GLuint shader, ShaderType shaderType)
-        -> void;
+    ~ShaderProgram() override;
 };
+
+// TODO: DELETE ME!!
+enum class ShaderType { PROGRAM, VERTEX, FRAGMENT };
+static inline auto operator<<(std::ostream& outputStream,
+                              ShaderType shaderTypeEnum) -> std::ostream&;
 
 // maybe conversion op would be better? idk
 static inline auto operator<<(std::ostream& outputStream,

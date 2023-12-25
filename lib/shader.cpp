@@ -2,7 +2,9 @@
 
 #include "file.hpp"
 
-Shader::Shader(const char* vertexShaderPath, const char* fragmentShaderPath) {
+auto checkCompileErrorsTMPDELETEME(GLuint shader, ShaderType shaderType) -> void;
+
+ShaderProgram::ShaderProgram(const char* vertexShaderPath, const char* fragmentShaderPath) {
     File vertexShader;
     try {
         vertexShader = File{vertexShaderPath};
@@ -23,21 +25,20 @@ Shader::Shader(const char* vertexShaderPath, const char* fragmentShaderPath) {
     uint vertex = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(vertex, 1, vertexShader.getRawContentP(), nullptr);
     glCompileShader(vertex);
-    checkCompileErrors(vertex, ShaderType::VERTEX);
+    checkCompileErrorsTMPDELETEME(vertex, ShaderType::VERTEX);
 
     // fragment Shader
     uint fragment = glCreateShader(GL_FRAGMENT_SHADER);
     glShaderSource(fragment, 1, fragmentShader.getRawContentP(), nullptr);
     glCompileShader(fragment);
-    checkCompileErrors(fragment, ShaderType::FRAGMENT);
+    checkCompileErrorsTMPDELETEME(fragment, ShaderType::FRAGMENT);
 
     // shader Program
-    shaderID = glCreateProgram();
-    glAttachShader(shaderID, vertex);
-    glAttachShader(shaderID, fragment);
-
-    glLinkProgram(shaderID);
-    checkCompileErrors(shaderID, ShaderType::PROGRAM);
+    setID(glCreateProgram());
+    glAttachShader(getID(), vertex);
+    glAttachShader(getID(), fragment);
+    glLinkProgram(getID());
+    displaySetupErrors();
 
     // delete the shaders as they're linked into our program now and no longer
     // necessary
@@ -45,25 +46,40 @@ Shader::Shader(const char* vertexShaderPath, const char* fragmentShaderPath) {
     glDeleteShader(fragment);
 }
 
-Shader::~Shader() { glDeleteProgram(shaderID); }
+auto ShaderProgram::glGetSetupiv() const -> GLint {
+    GLint linkStatus = 0;
+    glGetProgramiv(getID(), GL_LINK_STATUS, &linkStatus);
+    return linkStatus;
+}
 
-auto Shader::glUseProgram() const -> void {
+auto ShaderProgram::glGetInfoLog() const -> std::string {
+    // TODO: get the string size in a smarter way,
+    // probably isn't very smart to do it like this
+    std::string infoLog(1024, '\0');
+
+    glGetProgramInfoLog(getID(), static_cast<GLsizei>(infoLog.size()), nullptr, infoLog.data());
+    return infoLog;
+}
+
+ShaderProgram::~ShaderProgram() { glDeleteProgram(getID()); }
+
+auto ShaderProgram::glUseProgram() const -> void {
     // global namespace operator lul
-    ::glUseProgram(shaderID);
+    ::glUseProgram(getID());
 }
 
 template <>
-auto Shader::glUniform<GLint>(const GLchar* name, GLint value) const -> void {
-    glUniform1i(glGetUniformLocation(shaderID, name), value);
+auto ShaderProgram::glUniform<GLint>(const GLchar* name, GLint value) const -> void {
+    glUniform1i(glGetUniformLocation(getID(), name), value);
 }
 
 template <>
-auto Shader::glUniform<GLfloat>(const GLchar* name, GLfloat value) const
+auto ShaderProgram::glUniform<GLfloat>(const GLchar* name, GLfloat value) const
     -> void {
-    glUniform1f(glGetUniformLocation(shaderID, name), value);
+    glUniform1f(glGetUniformLocation(getID(), name), value);
 }
 
-auto Shader::checkCompileErrors(GLuint shader, ShaderType shaderType) -> void {
+auto checkCompileErrorsTMPDELETEME(GLuint shader, ShaderType shaderType) -> void {
     GLint compileStatus = 0;
     if (ShaderType::PROGRAM == shaderType) {
         glGetProgramiv(shader, GL_LINK_STATUS, &compileStatus);

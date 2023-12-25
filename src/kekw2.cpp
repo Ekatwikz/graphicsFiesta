@@ -139,7 +139,7 @@ auto main() -> int {
     glEnableVertexAttribArray(1);
 
     // construct shader program from vertex and fragment
-    Shader leShaderProgram{"./shaders/vertex.glsl", "./shaders/fragment.glsl"};
+    ShaderProgram leShaderProgram{"./shaders/vertex.glsl", "./shaders/fragment.glsl"};
 
     // render loop
     while (glfwWindowShouldClose(window) == 0) {
