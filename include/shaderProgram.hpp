@@ -14,14 +14,16 @@ class ShaderProgram : ShaderEntity {
     auto glUniform(const GLchar* name, T value) const -> void;
 
     // constructor reads and builds the shader
-   // TODO: don't do it like this lol
+    // TODO: don't do it like this lol
     explicit ShaderProgram(const char* vertexShaderPath,
-                    const char* fragmentShaderPath);
+                           const char* fragmentShaderPath);
 
-   // base class stuffs
-   [[nodiscard]] auto glGetSetupiv() const -> GLint override;
-   [[nodiscard]] auto glGetInfoLog() const -> std::string override;
-   [[nodiscard]] auto getName() const -> std::string override { return typeid(this).name(); };
+    // base class stuffs
+    [[nodiscard]] auto glGetSetupiv() const -> GLint override;
+    [[nodiscard]] auto glGetInfoLog() const -> std::string override;
+    [[nodiscard]] auto getName() const -> std::string override {
+        return typeid(this).name();
+    };
 
     // no move, no copy, xdd
     ShaderProgram(const ShaderProgram&) = delete;
@@ -50,4 +52,4 @@ static inline auto operator<<(std::ostream& outputStream,
     return outputStream << ShaderTypeNames[static_cast<size_t>(shaderTypeEnum)];
 }
 
-#endif // SHADER_H
+#endif  // SHADER_H

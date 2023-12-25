@@ -2,9 +2,11 @@
 
 #include "file.hpp"
 
-auto checkCompileErrorsTMPDELETEME(GLuint shader, ShaderType shaderType) -> void;
+auto checkCompileErrorsTMPDELETEME(GLuint shader, ShaderType shaderType)
+    -> void;
 
-ShaderProgram::ShaderProgram(const char* vertexShaderPath, const char* fragmentShaderPath) {
+ShaderProgram::ShaderProgram(const char* vertexShaderPath,
+                             const char* fragmentShaderPath) {
     File vertexShader;
     try {
         vertexShader = File{vertexShaderPath};
@@ -57,7 +59,8 @@ auto ShaderProgram::glGetInfoLog() const -> std::string {
     // probably isn't very smart to do it like this
     std::string infoLog(1024, '\0');
 
-    glGetProgramInfoLog(getID(), static_cast<GLsizei>(infoLog.size()), nullptr, infoLog.data());
+    glGetProgramInfoLog(getID(), static_cast<GLsizei>(infoLog.size()), nullptr,
+                        infoLog.data());
     return infoLog;
 }
 
@@ -69,7 +72,8 @@ auto ShaderProgram::glUseProgram() const -> void {
 }
 
 template <>
-auto ShaderProgram::glUniform<GLint>(const GLchar* name, GLint value) const -> void {
+auto ShaderProgram::glUniform<GLint>(const GLchar* name, GLint value) const
+    -> void {
     glUniform1i(glGetUniformLocation(getID(), name), value);
 }
 
@@ -79,7 +83,8 @@ auto ShaderProgram::glUniform<GLfloat>(const GLchar* name, GLfloat value) const
     glUniform1f(glGetUniformLocation(getID(), name), value);
 }
 
-auto checkCompileErrorsTMPDELETEME(GLuint shader, ShaderType shaderType) -> void {
+auto checkCompileErrorsTMPDELETEME(GLuint shader, ShaderType shaderType)
+    -> void {
     GLint compileStatus = 0;
     if (ShaderType::PROGRAM == shaderType) {
         glGetProgramiv(shader, GL_LINK_STATUS, &compileStatus);
