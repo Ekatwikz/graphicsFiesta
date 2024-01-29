@@ -67,6 +67,7 @@ inline auto ShaderEntity::displaySetupErrors() const -> void {
 #endif
 
     std::string shaderName = getName();
+    std::cerr << "Shader ID: " << ID << "\n";
     std::cerr << shaderName << "::" TO_STR(glGetSetupiv) " -> " << setupiv
               << " (expected: -> " TO_STR(GL_TRUE) " (== " X_TO_STR(
                      GL_TRUE) "))\n"
