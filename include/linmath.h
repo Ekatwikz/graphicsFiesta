@@ -1,3 +1,6 @@
+// yoinked from: https://github.com/datenwolf/linmath.h/blob/master/linmath.h
+// DWTFYWT Public License - lul
+
 #ifndef LINMATH_H
 #define LINMATH_H
 
