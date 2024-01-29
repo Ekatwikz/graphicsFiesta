@@ -1,25 +1,6 @@
 #include "shaderProgram.hpp"
 #include "shaderUnit.hpp"
 
-// should probably re-setup all its contained ShaderUnits first or something,
-// in general...
-auto ShaderProgram::setup() const -> void { glLinkProgram(getID()); };
-ShaderProgram::ShaderProgram(const char* vertexShaderPath,
-                             const char* fragmentShaderPath) {
-    ShaderUnit<GL_VERTEX_SHADER> vertexShader{File{vertexShaderPath}};
-    vertexShader.displaySetupErrors();
-
-    ShaderUnit<GL_FRAGMENT_SHADER> fragmentShader{File{fragmentShaderPath}};
-    fragmentShader.displaySetupErrors();
-
-    // TODO: store the units in some kind of vector or something here
-    setID(glCreateProgram());
-    glAttachShader(getID(), vertexShader.getID());
-    glAttachShader(getID(), fragmentShader.getID());
-    setup();
-    displaySetupErrors();
-}
-
 auto ShaderProgram::glGetSetupiv() const -> GLint {
     GLint linkStatus = 0;
     glGetProgramiv(getID(), GL_LINK_STATUS, &linkStatus);

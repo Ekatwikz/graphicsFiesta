@@ -41,7 +41,7 @@ auto main() -> int {
     glfwInit();
 
     // hint that we'll use OpenGL 3.3 core? not sure exactly
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 #ifdef __APPLE__
@@ -136,9 +136,9 @@ auto main() -> int {
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
 
-    // construct shader program from vertex and fragment
-    ShaderProgram leShaderProgram{"./shaders/vertex.glsl",
-                                  "./shaders/fragment.glsl"};
+    ShaderProgram leShaderProgram{
+        ShaderUnit<GL_FRAGMENT_SHADER>{File{"./shaders/fragment.glsl"}}
+    };
 
     // render loop
     while (glfwWindowShouldClose(window) == 0) {

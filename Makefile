@@ -14,13 +14,13 @@ GLADOBJECTDIR:=$(OBJECTDIR)/glad
 WARNINGS:=all extra pedantic
 
 # A little hacky but what can we dooo
-override DEBUGFLAGS:=-g3 -O0 $(DEBUGFLAGS)
+override DEBUGFLAGS:=-g3 -Og $(DEBUGFLAGS)
 
 FFLAGS:=no-omit-frame-pointer
 STANDARD:=c++20
 
 # would need to be changed for windows or something ig
-FFLAGS+=sanitize=address,undefined
+#FFLAGS+=sanitize=address,undefined
 EXTENSION:=
 
 SOURCES:=$(wildcard $(SOURCEDIR)/*.cpp)
