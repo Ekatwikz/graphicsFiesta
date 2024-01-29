@@ -20,7 +20,7 @@ FFLAGS:=no-omit-frame-pointer
 STANDARD:=c++20
 
 # would need to be changed for windows or something ig
-#FFLAGS+=sanitize=address,undefined
+FFLAGS+=sanitize=address,undefined
 EXTENSION:=
 
 SOURCES:=$(wildcard $(SOURCEDIR)/*.cpp)
