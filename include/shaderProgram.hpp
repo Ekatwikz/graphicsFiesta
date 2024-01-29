@@ -64,6 +64,8 @@ inline ShaderProgram::ShaderProgram(Args&&... args) {
    // we out here foldin
    (shaderUnits.emplace_back(std::forward<Args>(args)), ...);
 
+   setID(glCreateProgram());
+
    for (const auto& shaderUnit : shaderUnits) {
       std::visit([&](auto&& shader) {
          shader.displaySetupErrors();
