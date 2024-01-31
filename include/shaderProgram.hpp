@@ -1,8 +1,6 @@
 #ifndef SHADER_PROGRAM_HPP
 #define SHADER_PROGRAM_HPP
 
-#include <algorithm>
-
 #include <variant>
 #include <vector>
 
@@ -14,7 +12,7 @@ class ShaderProgram : ShaderEntity {
     // use/activate the shader program
     auto glUseProgram() const -> void;
 
-    // glUniform setter,
+    // glUniform setter (gotta glUse first),
     // but like... should this really be const??
     template <typename T>
     auto glUniform(const GLchar* name, T value) const -> void;
