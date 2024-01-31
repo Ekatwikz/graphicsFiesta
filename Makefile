@@ -14,7 +14,7 @@ GLADOBJECTDIR:=$(OBJECTDIR)/glad
 WARNINGS:=all extra pedantic
 
 # A little hacky but what can we dooo
-override DEBUGFLAGS:=-g3 -Og $(DEBUGFLAGS)
+override DEBUGFLAGS:=-g3 -O0 $(DEBUGFLAGS)
 
 FFLAGS:=no-omit-frame-pointer
 STANDARD:=c++20
