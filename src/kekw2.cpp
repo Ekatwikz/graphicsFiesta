@@ -6,6 +6,9 @@
 
 #include "shaderProgram.hpp"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 // callbacks
 void error_callback(int error, const char* description) {
     fprintf(stderr, "Oops![0x%08X]: %s\n", error, description);
@@ -34,6 +37,10 @@ void key_handler(GLFWwindow* window, int key, int scancode, int action,
 constexpr uint SCR_WIDTH = 800;
 constexpr uint SCR_HEIGHT = 600;
 auto main() -> int {
+    // ===
+    // === GLFW STUFFS
+    // ===
+
     // set the error callback function for glfw stuff
     glfwSetErrorCallback(error_callback);
 
@@ -54,7 +61,7 @@ auto main() -> int {
     GLFWwindow* window = glfwCreateWindow(
         SCR_WIDTH, SCR_HEIGHT, "IM GLing LESSGOOO", nullptr, nullptr);
     if (window == nullptr) {
-        std::cerr << "Failed to create GLFW window" << std::endl;
+        std::cerr << "Failed to create GLFW window\n";
         glfwTerminate();
         return 1;
     }
@@ -63,7 +70,7 @@ auto main() -> int {
     // init the glad loader or something, not sure
     if (gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress)) ==
         0) {
-        std::cerr << "Failed to initialize GLAD" << std::endl;
+        std::cerr << "Failed to initialize GLAD\n";
         return 1;
     }
 
@@ -74,6 +81,9 @@ auto main() -> int {
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetKeyCallback(window, key_handler);
 
+    // ===
+    // === SHADER STUFFS
+    // ===
     float positions[] = {
         0.5F,  0.5F,  0.0F,  // top right
         0.5F,  -0.5F, 0.0F,  // bottom right
@@ -95,13 +105,13 @@ auto main() -> int {
     };
 
     // setup and bind vertex array object
-    uint rectangle_VAO = 0;
+    uint rectangle_VAO;
     glGenVertexArrays(1, &rectangle_VAO);
     glBindVertexArray(rectangle_VAO);
 
     // setup vertex buffer object
     // with our vertices
-    uint rectangle_positions_VBO = 0;
+    uint rectangle_positions_VBO;
     glGenBuffers(1, &rectangle_positions_VBO);
     glBindBuffer(GL_ARRAY_BUFFER, rectangle_positions_VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(positions),
@@ -116,10 +126,10 @@ auto main() -> int {
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
 
     // setup some colors too
-    uint rectangle_colors_VBO = 0;
+    uint rectangle_colors_VBO;
     glGenBuffers(1, &rectangle_colors_VBO);
     glBindBuffer(GL_ARRAY_BUFFER, rectangle_colors_VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(positions),
+    glBufferData(GL_ARRAY_BUFFER, sizeof(colors),
                  static_cast<GLvoid*>(colors), GL_STATIC_DRAW);
 
     // similar format for the colors
@@ -141,7 +151,85 @@ auto main() -> int {
         ShaderUnit<GL_VERTEX_SHADER>{File{"./shaders/vertex.glsl"}}
     };
 
-    // render loop
+    // ===
+    // === TEXTURE BINDING STUFFS (BOX)
+    // ===
+    unsigned int boxTexture;
+    glGenTextures(1, &boxTexture);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, boxTexture);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    {
+        int width, height, nrChannels;
+        stbi_set_flip_vertically_on_load(static_cast<int>(true));
+        uint8_t* data = stbi_load("./textures/container.jpg", &width, &height, &nrChannels, 0);
+        if (data != nullptr) {
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+            glGenerateMipmap(GL_TEXTURE_2D); // probably not needed for later lol
+        } else {
+            std::cerr << "Failed to load texture\n";
+        }
+
+        stbi_image_free(data);
+    }
+
+    // ===
+    // === TEXTURE BINDING STUFFS (SMILEY)
+    // ===
+    unsigned int smileyTexture;
+    glGenTextures(1, &smileyTexture);
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, smileyTexture);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    {
+        int width, height, nrChannels;
+        stbi_set_flip_vertically_on_load(static_cast<int>(true));
+        uint8_t* data = stbi_load("./textures/awesomeface.png", &width, &height, &nrChannels, 0);
+        if (data != nullptr) {
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+            glGenerateMipmap(GL_TEXTURE_2D); // probably not needed for later lol
+        } else {
+            std::cerr << "Failed to load texture\n";
+        }
+
+        stbi_image_free(data);
+    }
+
+    // ===
+    // === TEXTURE VBO STUFFS
+    // ===
+    float tex_coords[] = {
+        2.0F,  2.0F, // top right
+        1.0F,  0.0F, // bottom right
+        0.0F, 0.0F, // bottom left
+        0.0F, 1.0F, // top left
+    };
+
+    uint rectangle_tex_VBO;
+    glGenBuffers(1, &rectangle_tex_VBO);
+    glBindBuffer(GL_ARRAY_BUFFER, rectangle_tex_VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(tex_coords),
+                 static_cast<GLvoid*>(tex_coords), GL_STATIC_DRAW);
+
+    // similar format for the colors
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+    glEnableVertexAttribArray(2);
+
+    // ===
+    // === RENDER LOOP
+    // ===
     while (glfwWindowShouldClose(window) == 0) {
         glClearColor(0.2F, 0.3F, 0.3F, 1.0F);
         glClear(GL_COLOR_BUFFER_BIT);
@@ -152,6 +240,10 @@ auto main() -> int {
         // vary the shape's color using the uniform in the fragshader
         leShaderProgram.glUniform("glfwTime",
                                   static_cast<float>(glfwGetTime()));
+
+        // set uniforms so we can tell samplers' offsets ig?
+        leShaderProgram.glUniform("box", 0);
+        leShaderProgram.glUniform("smiley", 1);
 
         glBindVertexArray(rectangle_VAO);
         // glDrawArrays(GL_TRIANGLES, 0, 3); // draw 3 verts
