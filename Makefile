@@ -3,7 +3,7 @@ DOCSDIR:=./docs
 REPORTDIR:=./report
 OUTPUTDIR:=./build
 OBJECTDIR:=$(OUTPUTDIR)/obj
-INCLUDEDIR:=./include
+INCLUDEDIRS:=./include ./include/cuda-samples/Common
 LIBDIR:=./lib
 
 # brh
@@ -15,18 +15,21 @@ WARNINGS:=all extra pedantic
 
 # A little hacky but what can we dooo
 override DEBUGFLAGS:=-g3 -O0 $(DEBUGFLAGS)
+override NVDEBUGFLAGS:=--debug --device-debug --profile $(NVDEBUGFLAGS)
 
-FFLAGS:=no-omit-frame-pointer
+FFLAGS:=no-omit-frame-pointer track-macro-expansion=0
 STANDARD:=c++20
+ARCH:=sm_86
+NVCC=nvcc
 
 # would need to be changed for windows or something ig
-FFLAGS+=sanitize=address,undefined
+FFLAGS+=sanitize=leak,undefined
 EXTENSION:=
 
 SOURCES:=$(wildcard $(SOURCEDIR)/*.cpp)
 DEFAULTTARGETS:=$(patsubst $(SOURCEDIR)/%.cpp, $(OUTPUTDIR)/%$(EXTENSION), $(SOURCES))
 LIBSOURCES:=$(wildcard $(LIBDIR)/*.cpp)
-LIBHEADERS:=$(wildcard $(INCLUDEDIR)/*.hpp)
+LIBHEADERS:=$(foreach dir, $(INCLUDEDIRS), $(wildcard $(dir)/*.hpp))
 OBJECTS:=$(patsubst $(LIBDIR)/%.cpp, $(OBJECTDIR)/%.o, $(LIBSOURCES))
 
 # kinda repetitve...
@@ -34,11 +37,11 @@ GLADSOURCES:=$(wildcard $(GLADSOURCEDIR)/*.c)
 GLADOBJECTS:=$(patsubst $(GLADSOURCEDIR)/%.c, $(GLADOBJECTDIR)/%.o, $(GLADSOURCES))
 
 LDFLAGS+=-lglfw -lGL -lX11 -lpthread -lXrandr -lXi -ldl
-CCFLAGS+=-I$(INCLUDEDIR) -I$(GLADLIBDIR) $(WARNINGS:%=-W%) $(FFLAGS:%=-f%) $(DEBUGFLAGS)
+BASEFLAGS:=$(INCLUDEDIRS:%=-I%) -I$(GLADLIBDIR) $(WARNINGS:%=-W%) $(FFLAGS:%=-f%)
+CCFLAGS+=$(BASEFLAGS) $(DEBUGFLAGS)
 CXXFLAGS+=$(CCFLAGS) -std=$(STANDARD)
-NVCCFLAGS+=--forward-unknown-to-host-compiler $(CXXFLAGS)
 
-NVCC=nvcc
+NVCCFLAGS+=--forward-unknown-to-host-compiler $(NVDEBUGFLAGS) $(BASEFLAGS) -std=$(STANDARD) -arch=$(ARCH)
 
 .PHONY: all clean
 .SECONDARY: $(GLADOBJECTS)
