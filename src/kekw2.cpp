@@ -2,8 +2,6 @@
 
 #include <GLFW/glfw3.h>
 
-#include <cmath>
-
 #include "shaderProgram.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -82,7 +80,7 @@ auto main() -> int {
     glfwSetKeyCallback(window, key_handler);
 
     // ===
-    // === SHADER STUFFS
+    // === SHADER STUFFS (Rect VAO, VBO, EBO)
     // ===
     float positions[] = {
         0.5F,  0.5F,  0.0F,  // top right
