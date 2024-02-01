@@ -36,6 +36,9 @@ GLADOBJECTS:=$(patsubst $(GLADSOURCEDIR)/%.c, $(GLADOBJECTDIR)/%.o, $(GLADSOURCE
 LDFLAGS+=-lglfw -lGL -lX11 -lpthread -lXrandr -lXi -ldl
 CCFLAGS+=-I$(INCLUDEDIR) -I$(GLADLIBDIR) $(WARNINGS:%=-W%) $(FFLAGS:%=-f%) $(DEBUGFLAGS)
 CXXFLAGS+=$(CCFLAGS) -std=$(STANDARD)
+NVCCFLAGS+=--forward-unknown-to-host-compiler $(CXXFLAGS)
+
+NVCC=nvcc
 
 .PHONY: all clean
 .SECONDARY: $(GLADOBJECTS)
@@ -66,7 +69,7 @@ all: $(DEFAULTTARGETS)
 $(OUTPUTDIR)/%$(EXTENSION): $(SOURCEDIR)/%.cpp $(OBJECTS) $(GLADOBJECTS) $(LIBHEADERS)
 	mkdir -pv $(OUTPUTDIR)
 	$(call print_step,$<,$@)
-	$(CXX) $(CXXFLAGS) $(OBJECTS) $(GLADOBJECTS) $< -o $@ $(LDFLAGS)
+	$(NVCC) $(NVCCFLAGS) $(OBJECTS) $(GLADOBJECTS) $< -o $@ $(LDFLAGS)
 
 # nukes are simpler than surgeries:
 clean:
