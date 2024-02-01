@@ -1,8 +1,12 @@
 #ifndef SHADER_ENTITY_HPP
 #define SHADER_ENTITY_HPP
 
-// include glad to get all the required OpenGL headers
+// include glad (if we need to??) to get all the required OpenGL headers
+#ifdef __gl_h_
+#pragma GCC warning "AIEEEEEE THERES ALREADY OpenGL?!"
+#else // __gl_h_
 #include <glad/glad.h>
+#endif // __gl_h_
 
 #include <iostream>
 
