@@ -1,11 +1,15 @@
-#define GLFW_INCLUDE_NONE
+#include "shaderProgram.hpp"
 
+#define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
-#include "shaderProgram.hpp"
+#include <cuda_runtime.h>
+#include <cuda_gl_interop.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+
+#include "helper_cuda.h"
 
 // callbacks
 void error_callback(int error, const char* description) {
@@ -16,6 +20,7 @@ void error_callback(int error, const char* description) {
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     (void)window;
+    std::cerr << "Resized to: " << width << 'x' << height << '\n';
     glViewport(0, 0, width, height);
 }
 
@@ -32,8 +37,62 @@ void key_handler(GLFWwindow* window, int key, int scancode, int action,
     }
 }
 
+__global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, int width, int height) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (x < width && y < height) {
+        uchar4 data = make_uchar4(x * 100 % 256, y * 100 % 256, 0, 255);
+        surf2Dwrite(data, output_surface, x * sizeof(uchar4), y);
+    }
+}
+
+#define GLCHECK() (__extension__({\
+    GLenum glErrorVal; \
+    const char* glErrorName; \
+    while ((glErrorVal = glGetError()) != GL_NO_ERROR) { \
+        switch (glErrorVal) { \
+            case GL_INVALID_ENUM: \
+                glErrorName = TO_STR(GL_INVALID_ENUM); \
+                break; \
+            case GL_INVALID_VALUE: \
+                glErrorName = TO_STR(GL_INVALID_VALUE); \
+                break; \
+            case GL_INVALID_OPERATION: \
+                glErrorName = TO_STR(GL_INVALID_OPERATION); \
+                break; \
+            /* case GL_STACK_OVERFLOW: \
+                glErrorName = TO_STR(GL_STACK_OVERFLOW); \
+                break; \
+            case GL_STACK_UNDERFLOW: \
+                glErrorName = TO_STR(GL_STACK_UNDERFLOW); \
+                break; */ \
+            case GL_OUT_OF_MEMORY: \
+                glErrorName = TO_STR(GL_OUT_OF_MEMORY); \
+                break; \
+            case GL_INVALID_FRAMEBUFFER_OPERATION: \
+                glErrorName = TO_STR(GL_INVALID_FRAMEBUFFER_OPERATION); \
+                break; \
+            /* case GL_CONTEXT_LOST: \
+                 glErrorName = TO_STR(GL_CONTEXT_LOST); \
+                 break; \
+             case GL_TABLE_TOO_LARGE: \
+                 break; \
+                 glErrorName = TO_STR(GL_TABLE_TOO_LARGE); */ \
+            default: \
+                glErrorName = "???"; \
+                break; \
+        } \
+        fprintf(stderr, __FILE__ ":%d in %s | glGetError()->0x%08X (%s)\n", __LINE__, __func__, glErrorVal, glErrorName); \
+    } \
+    glErrorVal; \
+}))
+
 constexpr uint SCR_WIDTH = 800;
 constexpr uint SCR_HEIGHT = 600;
+
+constexpr uint CU_TEX_WIDTH = 10;
+constexpr uint CU_TEX_HEIGHT = 5;
 auto main() -> int {
     // ===
     // === GLFW STUFFS
@@ -209,7 +268,7 @@ auto main() -> int {
     // === TEXTURE VBO STUFFS
     // ===
     float tex_coords[] = {
-        2.0F,  2.0F, // top right
+        1.0F,  1.0F, // top right
         1.0F,  0.0F, // bottom right
         0.0F, 0.0F, // bottom left
         0.0F, 1.0F, // top left
@@ -226,22 +285,77 @@ auto main() -> int {
     glEnableVertexAttribArray(2);
 
     // ===
+    // === CUDA TEXTURE STUFFS
+    // ===
+
+    // Create an OpenGL texture
+    GLuint texture_id;
+    glGenTextures(1, &texture_id);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, texture_id);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, CU_TEX_WIDTH, CU_TEX_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    // Register the texture with CUDA
+    cudaGraphicsResource* cuda_texture_resource;
+    checkCudaErrors(cudaGraphicsGLRegisterImage(&cuda_texture_resource, texture_id, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard));
+
+    // install shader and set uniforms so we can tell samplers' offsets ig?
+    leShaderProgram.glUseProgram();
+    leShaderProgram.glUniform("box", 0);
+    leShaderProgram.glUniform("smiley", 1);
+    leShaderProgram.glUniform("cuda", 2);
+    glUseProgram(0);
+
+    // ===
     // === RENDER LOOP
     // ===
     while (glfwWindowShouldClose(window) == 0) {
+        GLCHECK(); // justin casey's
+
         glClearColor(0.2F, 0.3F, 0.3F, 1.0F);
         glClear(GL_COLOR_BUFFER_BIT);
+
+        // ===
+        // ===
+        // ===
+
+        // Map the cuda texture to CUDA
+        cudaArray* cuda_texture_array;
+        checkCudaErrors(cudaGraphicsMapResources(1, &cuda_texture_resource));
+        checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&cuda_texture_array, cuda_texture_resource, 0, 0));
+
+         // Create a surface object
+        cudaResourceDesc res_desc;
+        memset(&res_desc, 0, sizeof(res_desc));
+        res_desc.resType = cudaResourceTypeArray;
+        res_desc.res.array.array = cuda_texture_array;
+        cudaSurfaceObject_t output_surface;
+        checkCudaErrors(cudaCreateSurfaceObject(&output_surface, &res_desc));
+
+        // Run the CUDA kernel
+        dim3 block(16, 16);
+        dim3 grid((CU_TEX_WIDTH + block.x - 1) / block.x, (CU_TEX_HEIGHT + block.y - 1) / block.y);
+        write_texture_kernel<<<grid, block>>>(output_surface, CU_TEX_WIDTH, CU_TEX_HEIGHT);
+        checkCudaErrors(cudaDeviceSynchronize());
+
+        // Unmap the texture so that OpenGL can use it
+        checkCudaErrors(cudaGraphicsUnmapResources(1, &cuda_texture_resource));
+
+        // ===
+        // ===
+        // ===
 
         // install the shader program and draw stuffs
         leShaderProgram.glUseProgram();
 
-        // vary the shape's color using the uniform in the fragshader
+        // pass time to the shaders so we can have a fiesta
         leShaderProgram.glUniform("glfwTime",
                                   static_cast<float>(glfwGetTime()));
-
-        // set uniforms so we can tell samplers' offsets ig?
-        leShaderProgram.glUniform("box", 0);
-        leShaderProgram.glUniform("smiley", 1);
 
         glBindVertexArray(rectangle_VAO);
         // glDrawArrays(GL_TRIANGLES, 0, 3); // draw 3 verts
@@ -257,5 +371,6 @@ auto main() -> int {
     glDeleteVertexArrays(1, &rectangle_VAO);
     glDeleteBuffers(1, &rectangle_positions_VBO);
     glDeleteBuffers(1, &rectangle_points_EBO);
+    glfwDestroyWindow(window);
     glfwTerminate();
 }

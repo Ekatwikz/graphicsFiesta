@@ -11,7 +11,8 @@ GLADSOURCEDIR:=./glad/src
 GLADLIBDIR:=./glad/include
 GLADOBJECTDIR:=$(OBJECTDIR)/glad
 
-WARNINGS:=all extra pedantic
+# no-implicit b/c some weird stuff in stb_image
+WARNINGS:=all extra no-implicit-fallthrough
 
 # A little hacky but what can we dooo
 override DEBUGFLAGS:=-g3 -O0 $(DEBUGFLAGS)
@@ -26,8 +27,8 @@ NVCC=nvcc
 FFLAGS+=sanitize=leak,undefined
 EXTENSION:=
 
-SOURCES:=$(wildcard $(SOURCEDIR)/*.cpp)
-DEFAULTTARGETS:=$(patsubst $(SOURCEDIR)/%.cpp, $(OUTPUTDIR)/%$(EXTENSION), $(SOURCES))
+SOURCES:=$(wildcard $(SOURCEDIR)/*.cu)
+DEFAULTTARGETS:=$(patsubst $(SOURCEDIR)/%.cu, $(OUTPUTDIR)/%$(EXTENSION), $(SOURCES))
 LIBSOURCES:=$(wildcard $(LIBDIR)/*.cpp)
 LIBHEADERS:=$(foreach dir, $(INCLUDEDIRS), $(wildcard $(dir)/*.hpp))
 OBJECTS:=$(patsubst $(LIBDIR)/%.cpp, $(OBJECTDIR)/%.o, $(LIBSOURCES))
@@ -40,8 +41,7 @@ LDFLAGS+=-lglfw -lGL -lX11 -lpthread -lXrandr -lXi -ldl
 BASEFLAGS:=$(INCLUDEDIRS:%=-I%) -I$(GLADLIBDIR) $(WARNINGS:%=-W%) $(FFLAGS:%=-f%)
 CCFLAGS+=$(BASEFLAGS) $(DEBUGFLAGS)
 CXXFLAGS+=$(CCFLAGS) -std=$(STANDARD)
-
-NVCCFLAGS+=--forward-unknown-to-host-compiler $(NVDEBUGFLAGS) $(BASEFLAGS) -std=$(STANDARD) -arch=$(ARCH)
+NVCCFLAGS+=--forward-unknown-to-host-compiler $(NVDEBUGFLAGS) -diag-suppress 550 $(BASEFLAGS) -std=$(STANDARD) -arch=$(ARCH)
 
 .PHONY: all clean
 .SECONDARY: $(GLADOBJECTS)
@@ -69,7 +69,7 @@ $(GLADOBJECTDIR)/%.o: $(GLADSOURCEDIR)/%.c
 	$(CC) $(CCFLAGS) -Wno-pedantic -c $< -o $@
 
 all: $(DEFAULTTARGETS)
-$(OUTPUTDIR)/%$(EXTENSION): $(SOURCEDIR)/%.cpp $(OBJECTS) $(GLADOBJECTS) $(LIBHEADERS)
+$(OUTPUTDIR)/%$(EXTENSION): $(SOURCEDIR)/%.cu $(OBJECTS) $(GLADOBJECTS) $(LIBHEADERS)
 	mkdir -pv $(OUTPUTDIR)
 	$(call print_step,$<,$@)
 	$(NVCC) $(NVCCFLAGS) $(OBJECTS) $(GLADOBJECTS) $< -o $@ $(LDFLAGS)
