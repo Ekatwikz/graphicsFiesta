@@ -5,6 +5,7 @@
 
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
+#include <unistd.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -37,13 +38,108 @@ void key_handler(GLFWwindow* window, int key, int scancode, int action,
     }
 }
 
-__global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, int width, int height) {
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
+using CameraInfo = struct CameraInfo_ {
+    float3 center;
+    uint2 imageResolution;
+    float fovDegrees; // radians?
+    float3 eulerAngles;
+};
+
+__device__ __host__ auto deg2rad(float degs) -> float {
+    return degs * M_PI / 180;
+}
+
+struct Matrix4x4f {
+    float4 rows[4];
+
+    __device__ __host__ Matrix4x4f(const float4& row1, const float4& row2, const float4& row3, const float4& row4) {
+        rows[0] = row1;
+        rows[1] = row2;
+        rows[2] = row3;
+        rows[3] = row4;
+    }
+
+    __device__ __host__ Matrix4x4f() : Matrix4x4f{{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}} {}
+
+    __device__ __host__ Matrix4x4f(const float3& euler_angles, const float3& camera_position) : Matrix4x4f{} {
+        //  https://en.wikipedia.org/wiki/Euler_angles#Rotation_matrix
+        float c_1 = cosf(euler_angles.x);
+        float s_1 = sinf(euler_angles.x);
+        float c_2 = cosf(euler_angles.y);
+        float s_2 = sinf(euler_angles.y);
+        float c_3 = cosf(euler_angles.z);
+        float s_3 = sinf(euler_angles.z);
+
+        rows[0] = make_float4(c_1 * c_2 * c_3 - s_1 * s_3, -c_3 * s_1 - c_1 * c_2 * s_3, c_1 * s_2, camera_position.x);
+        rows[1] = make_float4(c_1 * s_3 + c_2 * c_3 * s_1, c_1 * c_3 - c_2 * s_1 * s_3, s_1 * s_2, camera_position.y);
+        rows[2] = make_float4(-c_3 * s_2, s_2 * s_3, c_2, camera_position.z);
+    }
+
+    __device__ __host__ auto operator*(const float4& vec) const -> float4 {
+        float4 result;
+        result.x = rows[0].x * vec.x + rows[0].y * vec.y + rows[0].z * vec.z + rows[0].w * vec.w;
+        result.y = rows[1].x * vec.x + rows[1].y * vec.y + rows[1].z * vec.z + rows[1].w * vec.w;
+        result.z = rows[2].x * vec.x + rows[2].y * vec.y + rows[2].z * vec.z + rows[2].w * vec.w;
+        result.w = rows[3].x * vec.x + rows[3].y * vec.y + rows[3].z * vec.z + rows[3].w * vec.w;
+        return result;
+    }
+
+    __device__ __host__ auto operator*(const float3& vec) const -> float3 {
+        float4 result = *this * make_float4(vec.x, vec.y, vec.z, 1);
+        return make_float3(result.x, result.y, result.z);
+    }
+
+    __device__ void d_display() const {
+        for (const auto& row : rows) {
+            printf("%f %f %f %f\n", row.x, row.y, row.z, row.w);
+        }
+    }
+
+    __host__ void h_display() const {
+        for (const auto& row : rows) {
+            printf("%f %f %f %f\n", row.x, row.y, row.z, row.w);
+        }
+    }
+};
+
+auto __device__ __host__ operator-(const float3& lhs, const float3& rhs) -> float3 {
+    return make_float3(lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z);
+}
+
+__global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, CameraInfo* camInfo, float glfwTime) {
+    uint x = blockIdx.x * blockDim.x + threadIdx.x;
+    uint y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    uint width = camInfo->imageResolution.x;
+    uint height = camInfo->imageResolution.y;
+
+    float fovScale = tan(deg2rad(camInfo->fovDegrees / 2));
 
     if (x < width && y < height) {
-        uchar4 data = make_uchar4(x * 100 % 256, y * 100 % 256, 0, 255);
-        surf2Dwrite(data, output_surface, x * sizeof(uchar4), y);
+        uint2 pixel = make_uint2(x, y);
+        double2 pixelNDC = make_double2((pixel.x + 0.5) / width, (pixel.y + 0.5) / height);
+
+        float aspectRatio = 1.0F * width / height;
+        float2 pixCam = make_float2((2 * pixelNDC.x - 1) * aspectRatio * fovScale,
+                                      (1 - 2 * pixelNDC.y) * fovScale);
+        float3 pixCamCoord = make_float3(pixCam.x, pixCam.y, -1);
+
+        Matrix4x4f camToWorld{camInfo->eulerAngles, camInfo->center};
+        float3 pixWorldCoord = camToWorld * pixCamCoord;
+        float3 rayDirection = pixWorldCoord - camInfo->center;
+
+#ifdef PAUSE_FRAMES
+        //camToWorld.d_display();
+        printf("Pix:%d,%d|NDC:%lf,%lf|Cam:%lf,%lf|World:%lf,%lf,%lf|Dir:%lf,%lf,%lf\n",
+               pixel.x, pixel.y,
+               pixelNDC.x, pixelNDC.y,
+               pixCam.x, pixCam.y,
+               pixWorldCoord.x, pixWorldCoord.y, pixWorldCoord.z,
+               rayDirection.x, rayDirection.y, rayDirection.z);
+#endif // PAUSE_FRAMES
+
+        uchar4 tmpPixData = make_uchar4((x + (int)(glfwTime * 3)) * 100 % 256, (y + (int)(glfwTime)) * 100 % 256, 0, 255);
+        surf2Dwrite(tmpPixData, output_surface, x * sizeof(uchar4), y);
     }
 }
 
@@ -91,8 +187,8 @@ __global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, int wid
 constexpr uint SCR_WIDTH = 800;
 constexpr uint SCR_HEIGHT = 600;
 
-constexpr uint CU_TEX_WIDTH = 10;
-constexpr uint CU_TEX_HEIGHT = 5;
+constexpr uint CU_TEX_WIDTH = 16;
+constexpr uint CU_TEX_HEIGHT = 9;
 auto main() -> int {
     // ===
     // === GLFW STUFFS
@@ -317,6 +413,8 @@ auto main() -> int {
     while (glfwWindowShouldClose(window) == 0) {
         GLCHECK(); // justin casey's
 
+        auto glfwTime = static_cast<float>(glfwGetTime());
+
         glClearColor(0.2F, 0.3F, 0.3F, 1.0F);
         glClear(GL_COLOR_BUFFER_BIT);
 
@@ -337,10 +435,16 @@ auto main() -> int {
         cudaSurfaceObject_t output_surface;
         checkCudaErrors(cudaCreateSurfaceObject(&output_surface, &res_desc));
 
-        // Run the CUDA kernel
+        // === Run the CUDA kernel
         dim3 block(16, 16);
         dim3 grid((CU_TEX_WIDTH + block.x - 1) / block.x, (CU_TEX_HEIGHT + block.y - 1) / block.y);
-        write_texture_kernel<<<grid, block>>>(output_surface, CU_TEX_WIDTH, CU_TEX_HEIGHT);
+        CameraInfo* camInfo;
+        checkCudaErrors(cudaMallocManaged(&camInfo, sizeof(CameraInfo)));
+        memset(camInfo, 0, sizeof(CameraInfo));
+        // TODO: get this from current reso or summink?
+        camInfo->imageResolution = make_uint2(CU_TEX_WIDTH, CU_TEX_HEIGHT);
+        camInfo->fovDegrees = 90;
+        write_texture_kernel<<<grid, block>>>(output_surface, camInfo, glfwTime);
         checkCudaErrors(cudaDeviceSynchronize());
 
         // Unmap the texture so that OpenGL can use it
@@ -354,8 +458,7 @@ auto main() -> int {
         leShaderProgram.glUseProgram();
 
         // pass time to the shaders so we can have a fiesta
-        leShaderProgram.glUniform("glfwTime",
-                                  static_cast<float>(glfwGetTime()));
+        leShaderProgram.glUniform("glfwTime", glfwTime);
 
         glBindVertexArray(rectangle_VAO);
         // glDrawArrays(GL_TRIANGLES, 0, 3); // draw 3 verts
@@ -365,6 +468,10 @@ auto main() -> int {
 
         glfwSwapBuffers(window);
         glfwPollEvents();
+
+#ifdef PAUSE_FRAMES
+        getchar(); // tmp boonk for going frame by frame
+#endif // PAUSE_FRAMES
     }
 
     // cleanup a little and exit
