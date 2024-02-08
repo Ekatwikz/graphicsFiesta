@@ -7,6 +7,7 @@
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
 #include <curand_kernel.h>
+#include <math.h>
 #include <unistd.h>
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -144,17 +145,18 @@ struct Matrix4x4f {
         return make_float3(result.x, result.y, result.z);
     }
 
-    __device__ void d_display() const {
-        for (const auto& row : rows) {
-            printf("%f %f %f %f\n", row.x, row.y, row.z, row.w);
-        }
-    }
+    // b/c they're referring to different printfs?
+#define PRINT_MATRIX() do { \
+        printf("{"); \
+        for (const auto& row : rows) { \
+            printf("{%f %f %f %f},\n", row.x, row.y, row.z, row.w); \
+        } \
+        printf("}"); \
+} while(0)
 
-    __host__ void h_display() const {
-        for (const auto& row : rows) {
-            printf("%f %f %f %f\n", row.x, row.y, row.z, row.w);
-        }
-    }
+    __device__ void d_display() const { PRINT_MATRIX(); }
+
+    __host__ void h_display() const { PRINT_MATRIX(); }
 };
 
 auto __device__ __host__ operator-(const float3& lhs, const float3& rhs) -> float3 {
@@ -201,7 +203,7 @@ __global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, CameraI
 
 #ifdef PAUSE_FRAMES
         //camToWorld.d_display();
-        printf("Pix:%d,%d|NDC:%lf,%lf|Cam:%lf,%lf|World:%lf,%lf,%lf|Dir:%lf,%lf,%lf\n",
+        printf("Pix:{%d,%d}|NDC:{%lf,%lf}|Cam:{%lf,%lf}|World:{%lf,%lf,%lf}|Dir:{%lf,%lf,%lf}\n",
                pixel.x, pixel.y,
                pixelNDC.x, pixelNDC.y,
                pixCam.x, pixCam.y,
@@ -210,35 +212,47 @@ __global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, CameraI
 #endif // PAUSE_FRAMES
 
         float min_t_hc = FLT_MAX;
+        float t_0 = NAN;
+        float t_1 = NAN;
+        long intersectedIndex = -1; // will just use -1 for "no intersection"
 
         for (uint i = 0; i < sphereCount; ++i) {
-            float3 currentCenter = spheresInfo->centers[i];
+            // Geometric solution from:
+            // https://github.com/scratchapixel/website/blob/main/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-sphere-intersection.md?plain=1
             float currentRadius = spheresInfo->radii[i];
 
             float3 L = spheresInfo->centers[i] - camInfo->center;
             float t_ca = dot(L, D);
-            if (t_ca < 0) {
+            if (t_ca < 0) { // sphere is behind
                 continue;
             }
 
             float d = sqrt(dot(L, L) - t_ca * t_ca);
-            if (d > spheresInfo->radii[i]) {
+            if (d > spheresInfo->radii[i]) { // ray "missed"
                 continue;
             }
 
             float t_hc = sqrt(currentRadius * currentRadius - d * d);
-            if (t_hc > min_t_hc) {
+            if (t_hc > min_t_hc) { // blocked by some closer sphere
                 continue;
             }
 
             min_t_hc = t_hc;
+            intersectedIndex = i;
+            t_0 = t_ca - t_hc;
+            t_1 = t_ca + t_hc;
         }
 
 #ifdef PAUSE_FRAMES
-        if (min_t_hc < FLT_MAX) {
-            printf("%d,%d: %lf\n", x, y, min_t_hc);
+        if (-1 != intersectedIndex) { // if we're lookin at somethin
+            printf("%d,%d: t_hc:%lf t_0:%f r:%f [%ld] {%f, %f, %f}->{%f, %f, %f}\n", x, y, min_t_hc, t_0,
+                   spheresInfo->radii[intersectedIndex], intersectedIndex,
+                   pixWorldCoord.x, pixWorldCoord.y, pixWorldCoord.z,
+                   spheresInfo->centers[intersectedIndex].x, spheresInfo->centers[intersectedIndex].y, spheresInfo->centers[intersectedIndex].z);
         }
 #endif // PAUSE_FRAMES
+
+        // === DRAW STUFFS ===
 
         uchar4 tmpPixData = make_uchar4(0, 0, 0, 255);
         // uchar4 tmpPixData = make_uchar4((x + (int)(glfwTime * 3)) * 100 % 256, (y + (int)(glfwTime)) * 100 % 256, 0, 255);
@@ -247,7 +261,7 @@ __global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, CameraI
             tmpPixData = make_uchar4(255, 255, 255, 255);
         }
 
-        // manually flip texture at the last moment, idk why but opengl seems to goof up the texture otherwise
+        // manually flip texture at the last moment, I dont remember why but opengl goofs up the texture otherwise
         surf2Dwrite(tmpPixData, output_surface, x * sizeof(uchar4), height - 1 - y);
     }
 }
@@ -296,8 +310,8 @@ __global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, CameraI
 constexpr uint SCR_WIDTH = 800;
 constexpr uint SCR_HEIGHT = 600;
 
-constexpr uint CU_TEX_WIDTH = 1920;
-constexpr uint CU_TEX_HEIGHT = 1080;
+constexpr uint CU_TEX_WIDTH = 16;
+constexpr uint CU_TEX_HEIGHT = 9;
 
 constexpr uint SPHERE_COUNT = 1000;
 constexpr uint LIGHT_COUNT = 10;
@@ -541,8 +555,17 @@ auto main() -> int {
     curandState_t* lightRandStates = nullptr;
     checkCudaErrors(cudaMalloc(&sphereRandStates, SPHERE_COUNT * sizeof(curandState_t)));
     checkCudaErrors(cudaMalloc(&lightRandStates, LIGHT_COUNT * sizeof(curandState_t)));
-    initRand<<<(SPHERE_COUNT + 255) / 256, 256>>>(0, sphereRandStates); // preset seeds for easier debugging, for now
-    initRand<<<(LIGHT_COUNT + 255) / 256, 256>>>(0, lightRandStates);
+
+#ifdef RAND_SEED
+    uint sphereSeed = RAND_SEED;
+    uint lightSeed = RAND_SEED;
+#else // !RAND_SEED
+    uint sphereSeed = time(nullptr);
+    uint lightSeed = time(nullptr);
+#endif // RAND_SEED
+
+    initRand<<<(SPHERE_COUNT + 255) / 256, 256>>>(sphereSeed, sphereRandStates); // preset seeds for easier debugging, for now
+    initRand<<<(LIGHT_COUNT + 255) / 256, 256>>>(lightSeed, lightRandStates);
     checkCudaErrors(cudaDeviceSynchronize());
 
     // Initialize random spheres and lights
