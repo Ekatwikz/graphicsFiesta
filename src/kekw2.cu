@@ -1,3 +1,4 @@
+#include <cfloat>
 #include "shaderProgram.hpp"
 
 #define GLFW_INCLUDE_NONE
@@ -5,6 +6,7 @@
 
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
+#include <curand_kernel.h>
 #include <unistd.h>
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -13,7 +15,7 @@
 #include "helper_cuda.h"
 
 // callbacks
-void error_callback(int error, const char* description) {
+void glfw_error_callback(int error, const char* description) {
     fprintf(stderr, "Oops![0x%08X]: %s\n", error, description);
     glfwTerminate();
     exit(EXIT_FAILURE);
@@ -25,7 +27,7 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
 }
 
-void key_handler(GLFWwindow* window, int key, int scancode, int action,
+void key_callback(GLFWwindow* window, int key, int scancode, int action,
                  int mods) {
     (void)scancode;
     (void)mods;
@@ -47,6 +49,59 @@ using CameraInfo = struct CameraInfo_ {
 
 __device__ __host__ auto deg2rad(float degs) -> float {
     return degs * M_PI / 180;
+}
+
+// SOA type stuff ig?
+struct Spheres {
+    float3* centers;
+    float* radii;
+};
+struct Lights {
+    float3* centers;
+};
+
+__global__ void initRand(unsigned int seed, curandState_t* states) {
+    uint idx = threadIdx.x + blockIdx.x * blockDim.x;
+    curand_init(seed, idx, 0, &states[idx]);
+}
+
+__global__ void initSpheres(Spheres* spheres, float3 centerMin, float3 centerMax, float radiusMin, float radiusMax, uint numSpheres, curandState_t* states) {
+    uint idx = threadIdx.x + blockIdx.x * blockDim.x;
+
+    if (idx < numSpheres) {
+        curandState_t state = states[idx];
+        spheres->centers[idx] = make_float3(
+            (centerMin.x + curand_uniform(&state) * (centerMax.x - centerMin.x)) * (curand_uniform(&state) > 0.5F ? 1 : -1),
+            (centerMin.y + curand_uniform(&state) * (centerMax.y - centerMin.y)) * (curand_uniform(&state) > 0.5F ? 1 : -1),
+            (centerMin.z + curand_uniform(&state) * (centerMax.z - centerMin.z)) * (curand_uniform(&state) > 0.5F ? 1 : -1)
+        );
+
+        spheres->radii[idx] = radiusMin + curand_uniform(&state) * (radiusMax - radiusMin);
+
+#ifdef PAUSE_FRAMES
+        printf("[%d]: C_S:%lf,%lf,%lf|R:%lf\n", idx,
+               spheres->centers[idx].x, spheres->centers[idx].y, spheres->centers[idx].z,
+               spheres->radii[idx]);
+#endif // PAUSE_FRAMES
+    }
+}
+
+__global__ void initLights(Lights* lights, float3 centerMin, float3 centerMax, uint numLights, curandState_t* states) {
+    uint idx = threadIdx.x + blockIdx.x * blockDim.x;
+
+    if (idx < numLights) {
+        curandState_t state = states[idx];
+        lights->centers[idx] = make_float3(
+            (centerMin.x + curand_uniform(&state) * (centerMax.x - centerMin.x)) * (curand_uniform(&state) > 0.5F ? 1 : -1),
+            (centerMin.y + curand_uniform(&state) * (centerMax.y - centerMin.y)) * (curand_uniform(&state) > 0.5F ? 1 : -1),
+            (centerMin.z + curand_uniform(&state) * (centerMax.z - centerMin.z)) * (curand_uniform(&state) > 0.5F ? 1 : -1)
+        );
+
+#ifdef PAUSE_FRAMES
+        printf("[%d]: C_L:%lf,%lf,%lf\n", idx,
+               lights->centers[idx].x, lights->centers[idx].y, lights->centers[idx].z);
+#endif // PAUSE_FRAMES
+    }
 }
 
 struct Matrix4x4f {
@@ -75,7 +130,7 @@ struct Matrix4x4f {
         rows[2] = make_float4(-c_3 * s_2, s_2 * s_3, c_2, camera_position.z);
     }
 
-    __device__ __host__ auto operator*(const float4& vec) const -> float4 {
+    __inline__ __device__ __host__ auto operator*(const float4& vec) const -> float4 {
         float4 result;
         result.x = rows[0].x * vec.x + rows[0].y * vec.y + rows[0].z * vec.z + rows[0].w * vec.w;
         result.y = rows[1].x * vec.x + rows[1].y * vec.y + rows[1].z * vec.z + rows[1].w * vec.w;
@@ -84,7 +139,7 @@ struct Matrix4x4f {
         return result;
     }
 
-    __device__ __host__ auto operator*(const float3& vec) const -> float3 {
+    __inline__  __device__ __host__ auto operator*(const float3& vec) const -> float3 {
         float4 result = *this * make_float4(vec.x, vec.y, vec.z, 1);
         return make_float3(result.x, result.y, result.z);
     }
@@ -106,7 +161,22 @@ auto __device__ __host__ operator-(const float3& lhs, const float3& rhs) -> floa
     return make_float3(lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z);
 }
 
-__global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, CameraInfo* camInfo, float glfwTime) {
+auto __device__ __host__ dot(const float3& lhs, const float3& rhs) -> float {
+    return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
+}
+
+auto __device__ __host__ operator/(const float3& lhs, const float& rhs) -> float3 {
+    return make_float3(lhs.x / rhs, lhs.y / rhs, lhs.z / rhs);
+}
+
+auto __device__ __host__ normalize(const float3& vec) -> float3 {
+    return vec / sqrt(dot(vec, vec));
+}
+
+__global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, CameraInfo* camInfo,
+                                     Spheres* spheresInfo, uint sphereCount,
+                                     Lights* lightsInfo, uint lightsCount,
+                                     float glfwTime) {
     uint x = blockIdx.x * blockDim.x + threadIdx.x;
     uint y = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -127,6 +197,7 @@ __global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, CameraI
         Matrix4x4f camToWorld{camInfo->eulerAngles, camInfo->center};
         float3 pixWorldCoord = camToWorld * pixCamCoord;
         float3 rayDirection = pixWorldCoord - camInfo->center;
+        float3 D = normalize(rayDirection);
 
 #ifdef PAUSE_FRAMES
         //camToWorld.d_display();
@@ -138,8 +209,46 @@ __global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, CameraI
                rayDirection.x, rayDirection.y, rayDirection.z);
 #endif // PAUSE_FRAMES
 
-        uchar4 tmpPixData = make_uchar4((x + (int)(glfwTime * 3)) * 100 % 256, (y + (int)(glfwTime)) * 100 % 256, 0, 255);
-        surf2Dwrite(tmpPixData, output_surface, x * sizeof(uchar4), y);
+        float min_t_hc = FLT_MAX;
+
+        for (uint i = 0; i < sphereCount; ++i) {
+            float3 currentCenter = spheresInfo->centers[i];
+            float currentRadius = spheresInfo->radii[i];
+
+            float3 L = spheresInfo->centers[i] - camInfo->center;
+            float t_ca = dot(L, D);
+            if (t_ca < 0) {
+                continue;
+            }
+
+            float d = sqrt(dot(L, L) - t_ca * t_ca);
+            if (d > spheresInfo->radii[i]) {
+                continue;
+            }
+
+            float t_hc = sqrt(currentRadius * currentRadius - d * d);
+            if (t_hc > min_t_hc) {
+                continue;
+            }
+
+            min_t_hc = t_hc;
+        }
+
+#ifdef PAUSE_FRAMES
+        if (min_t_hc < FLT_MAX) {
+            printf("%d,%d: %lf\n", x, y, min_t_hc);
+        }
+#endif // PAUSE_FRAMES
+
+        uchar4 tmpPixData = make_uchar4(0, 0, 0, 255);
+        // uchar4 tmpPixData = make_uchar4((x + (int)(glfwTime * 3)) * 100 % 256, (y + (int)(glfwTime)) * 100 % 256, 0, 255);
+
+        if (min_t_hc < FLT_MAX) {
+            tmpPixData = make_uchar4(255, 255, 255, 255);
+        }
+
+        // manually flip texture at the last moment, idk why but opengl seems to goof up the texture otherwise
+        surf2Dwrite(tmpPixData, output_surface, x * sizeof(uchar4), height - 1 - y);
     }
 }
 
@@ -187,15 +296,18 @@ __global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, CameraI
 constexpr uint SCR_WIDTH = 800;
 constexpr uint SCR_HEIGHT = 600;
 
-constexpr uint CU_TEX_WIDTH = 16;
-constexpr uint CU_TEX_HEIGHT = 9;
+constexpr uint CU_TEX_WIDTH = 1920;
+constexpr uint CU_TEX_HEIGHT = 1080;
+
+constexpr uint SPHERE_COUNT = 1000;
+constexpr uint LIGHT_COUNT = 10;
 auto main() -> int {
     // ===
     // === GLFW STUFFS
     // ===
 
     // set the error callback function for glfw stuff
-    glfwSetErrorCallback(error_callback);
+    glfwSetErrorCallback(glfw_error_callback);
 
     // init glfw
     glfwInit();
@@ -232,7 +344,7 @@ auto main() -> int {
 
     // set callbacks for window resizes and keystrokes
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-    glfwSetKeyCallback(window, key_handler);
+    glfwSetKeyCallback(window, key_callback);
 
     // ===
     // === SHADER STUFFS (Rect VAO, VBO, EBO)
@@ -408,10 +520,49 @@ auto main() -> int {
     glUseProgram(0);
 
     // ===
+    // === SPHERE / LIGHTS SETUP
+    // ===
+    Spheres* spheresInfo = nullptr;
+    checkCudaErrors(cudaMallocManaged(&spheresInfo, sizeof(Spheres)));
+    checkCudaErrors(cudaMalloc(&spheresInfo->centers, sizeof(float3) * SPHERE_COUNT));
+    checkCudaErrors(cudaMalloc(&spheresInfo->radii, sizeof(float) * SPHERE_COUNT));
+    Lights* lightsInfo = nullptr;
+    checkCudaErrors(cudaMallocManaged(&lightsInfo, sizeof(Lights)));
+    checkCudaErrors(cudaMalloc(&lightsInfo->centers, sizeof(float) * LIGHT_COUNT));
+
+    // Define your min and max values here
+    float3 centerMin = {5, 5, 5};
+    float3 centerMax = {500, 500, 500};
+    float radiusMin = 1;
+    float radiusMax = 5;
+
+    // Initialize cuRAND states
+    curandState_t* sphereRandStates = nullptr;
+    curandState_t* lightRandStates = nullptr;
+    checkCudaErrors(cudaMalloc(&sphereRandStates, SPHERE_COUNT * sizeof(curandState_t)));
+    checkCudaErrors(cudaMalloc(&lightRandStates, LIGHT_COUNT * sizeof(curandState_t)));
+    initRand<<<(SPHERE_COUNT + 255) / 256, 256>>>(0, sphereRandStates); // preset seeds for easier debugging, for now
+    initRand<<<(LIGHT_COUNT + 255) / 256, 256>>>(0, lightRandStates);
+    checkCudaErrors(cudaDeviceSynchronize());
+
+    // Initialize random spheres and lights
+    initSpheres<<<(SPHERE_COUNT + 255) / 256, 256>>>(spheresInfo, centerMin, centerMax, radiusMin, radiusMax, SPHERE_COUNT, sphereRandStates);
+    initLights<<<(LIGHT_COUNT + 255) / 256, 256>>>(lightsInfo, centerMin, centerMax, LIGHT_COUNT, lightRandStates);
+    checkCudaErrors(cudaDeviceSynchronize());
+
+    // ===
     // === RENDER LOOP
     // ===
     while (glfwWindowShouldClose(window) == 0) {
-        GLCHECK(); // justin casey's
+#ifdef DEBUG_TIMINGS
+        cudaEvent_t stepStartEvent = nullptr;
+        cudaEvent_t stepStopEvent = nullptr;
+        float stepTime = 0;
+
+        checkCudaErrors(cudaEventCreate(&stepStartEvent));
+        checkCudaErrors(cudaEventCreate(&stepStopEvent));
+        checkCudaErrors(cudaEventRecord(stepStartEvent));
+#endif // DEBUG_TIMINGS
 
         auto glfwTime = static_cast<float>(glfwGetTime());
 
@@ -444,7 +595,7 @@ auto main() -> int {
         // TODO: get this from current reso or summink?
         camInfo->imageResolution = make_uint2(CU_TEX_WIDTH, CU_TEX_HEIGHT);
         camInfo->fovDegrees = 90;
-        write_texture_kernel<<<grid, block>>>(output_surface, camInfo, glfwTime);
+        write_texture_kernel<<<grid, block>>>(output_surface, camInfo, spheresInfo, SPHERE_COUNT, lightsInfo, LIGHT_COUNT, glfwTime);
         checkCudaErrors(cudaDeviceSynchronize());
 
         // Unmap the texture so that OpenGL can use it
@@ -467,6 +618,15 @@ auto main() -> int {
         glBindVertexArray(0);     // unbind, no need to unbind it every time tho
 
         glfwSwapBuffers(window);
+
+#ifdef DEBUG_TIMINGS
+        checkCudaErrors(cudaEventRecord(stepStopEvent));
+        checkCudaErrors(cudaEventSynchronize(stepStopEvent));
+        checkCudaErrors(cudaEventElapsedTime(&stepTime, stepStartEvent,
+                                             stepStopEvent));
+        std::fprintf(stderr, "%6.3fms\n", stepTime);
+#endif // DEBUG_TIMINGS
+
         glfwPollEvents();
 
 #ifdef PAUSE_FRAMES
@@ -475,6 +635,7 @@ auto main() -> int {
     }
 
     // cleanup a little and exit
+    checkCudaErrors(cudaGraphicsUnregisterResource(cuda_texture_resource));
     glDeleteVertexArrays(1, &rectangle_VAO);
     glDeleteBuffers(1, &rectangle_positions_VBO);
     glDeleteBuffers(1, &rectangle_points_EBO);

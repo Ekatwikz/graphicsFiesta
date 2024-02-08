@@ -8,3 +8,6 @@ compile_commands.json
 # misc
 *.zip
 
+# NSYS Reports
+reports
+

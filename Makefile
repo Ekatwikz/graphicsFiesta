@@ -15,8 +15,10 @@ GLADOBJECTDIR:=$(OBJECTDIR)/glad
 WARNINGS:=all extra no-implicit-fallthrough
 
 # A little hacky but what can we dooo
+ifndef FASTER_PLS
 override DEBUGFLAGS:=-g3 -O0 $(DEBUGFLAGS)
 override NVDEBUGFLAGS:=--debug --device-debug --profile $(NVDEBUGFLAGS)
+endif
 
 FFLAGS:=no-omit-frame-pointer track-macro-expansion=0
 STANDARD:=c++20
