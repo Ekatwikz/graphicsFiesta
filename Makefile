@@ -15,7 +15,10 @@ GLADOBJECTDIR:=$(OBJECTDIR)/glad
 WARNINGS:=all extra no-implicit-fallthrough
 
 # A little hacky but what can we dooo
-ifndef FASTER_PLS
+ifdef FASTER_PLS
+override DEBUGFLAGS:=-O3 $(DEBUGFLAGS)
+override NVDEBUGFLAGS:=--dopt=on --use_fast_math --extra-device-vectorization $(NVDEBUGFLAGS)
+else
 override DEBUGFLAGS:=-g3 -O0 $(DEBUGFLAGS)
 override NVDEBUGFLAGS:=--debug --device-debug --profile $(NVDEBUGFLAGS)
 endif

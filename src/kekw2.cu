@@ -7,7 +7,7 @@
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
 #include <curand_kernel.h>
-#include <math.h>
+#include <cmath>
 #include <unistd.h>
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -59,6 +59,9 @@ struct Spheres {
 };
 struct Lights {
     float3* centers;
+    float3* colors;
+    float3 attenuation;
+    float ambientStrength;
 };
 
 __global__ void initRand(unsigned int seed, curandState_t* states) {
@@ -71,36 +74,43 @@ __global__ void initSpheres(Spheres* spheres, float3 centerMin, float3 centerMax
 
     if (idx < numSpheres) {
         curandState_t state = states[idx];
-        spheres->centers[idx] = make_float3(
+        spheres->centers[idx] = {
             (centerMin.x + curand_uniform(&state) * (centerMax.x - centerMin.x)) * (curand_uniform(&state) > 0.5F ? 1 : -1),
             (centerMin.y + curand_uniform(&state) * (centerMax.y - centerMin.y)) * (curand_uniform(&state) > 0.5F ? 1 : -1),
             (centerMin.z + curand_uniform(&state) * (centerMax.z - centerMin.z)) * (curand_uniform(&state) > 0.5F ? 1 : -1)
-        );
+        };
 
         spheres->radii[idx] = radiusMin + curand_uniform(&state) * (radiusMax - radiusMin);
 
 #ifdef PAUSE_FRAMES
-        printf("[%d]: C_S:%lf,%lf,%lf|R:%lf\n", idx,
+        printf("[%d]: C_S:{%lf,%lf,%lf}|R:%lf\n", idx,
                spheres->centers[idx].x, spheres->centers[idx].y, spheres->centers[idx].z,
                spheres->radii[idx]);
 #endif // PAUSE_FRAMES
     }
 }
 
-__global__ void initLights(Lights* lights, float3 centerMin, float3 centerMax, uint numLights, curandState_t* states) {
+__global__ void initLights(Lights* lights, float3 centerMin, float3 centerMax,  uint numLights, curandState_t* states) {
     uint idx = threadIdx.x + blockIdx.x * blockDim.x;
 
     if (idx < numLights) {
         curandState_t state = states[idx];
-        lights->centers[idx] = make_float3(
+        lights->centers[idx] = {
             (centerMin.x + curand_uniform(&state) * (centerMax.x - centerMin.x)) * (curand_uniform(&state) > 0.5F ? 1 : -1),
             (centerMin.y + curand_uniform(&state) * (centerMax.y - centerMin.y)) * (curand_uniform(&state) > 0.5F ? 1 : -1),
             (centerMin.z + curand_uniform(&state) * (centerMax.z - centerMin.z)) * (curand_uniform(&state) > 0.5F ? 1 : -1)
-        );
+        };
+
+        lights->colors[idx] = {
+            curand_uniform(&state),
+            curand_uniform(&state),
+            curand_uniform(&state)
+        };
 
 #ifdef PAUSE_FRAMES
-        printf("[%d]: C_L:%lf,%lf,%lf\n", idx,
-               lights->centers[idx].x, lights->centers[idx].y, lights->centers[idx].z);
+        printf("[%d]: C_L:{%lf,%lf,%lf}, C:{%f, %f, %f}\n", idx,
+               lights->centers[idx].x, lights->centers[idx].y, lights->centers[idx].z,
+               lights->colors[idx].x, lights->colors[idx].y, lights->colors[idx].z) ;
 #endif // PAUSE_FRAMES
     }
 }
@@ -160,7 +170,15 @@ struct Matrix4x4f {
 };
 
 auto __device__ __host__ operator-(const float3& lhs, const float3& rhs) -> float3 {
-    return make_float3(lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z);
+    return {lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z};
+}
+
+auto __device__ __host__ operator+(const float3& lhs, const float3& rhs) -> float3 {
+    return {lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z};
+}
+
+auto __device__ __host__ operator+=(float3& lhs, const float3& rhs) -> float3 {
+    return lhs = lhs + rhs;
 }
 
 auto __device__ __host__ dot(const float3& lhs, const float3& rhs) -> float {
@@ -168,7 +186,11 @@ auto __device__ __host__ dot(const float3& lhs, const float3& rhs) -> float {
 }
 
 auto __device__ __host__ operator/(const float3& lhs, const float& rhs) -> float3 {
-    return make_float3(lhs.x / rhs, lhs.y / rhs, lhs.z / rhs);
+    return {lhs.x / rhs, lhs.y / rhs, lhs.z / rhs};
+}
+
+auto __device__ __host__ operator*(const float3& lhs, const float& rhs) -> float3 {
+    return {lhs.x * rhs, lhs.y * rhs, lhs.z * rhs};
 }
 
 auto __device__ __host__ normalize(const float3& vec) -> float3 {
@@ -213,7 +235,7 @@ __global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, CameraI
 
         float min_t_hc = FLT_MAX;
         float t_0 = NAN;
-        float t_1 = NAN;
+        //float t_1 = NAN;
         long intersectedIndex = -1; // will just use -1 for "no intersection"
 
         for (uint i = 0; i < sphereCount; ++i) {
@@ -240,25 +262,49 @@ __global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, CameraI
             min_t_hc = t_hc;
             intersectedIndex = i;
             t_0 = t_ca - t_hc;
-            t_1 = t_ca + t_hc;
+            //t_1 = t_ca + t_hc;
         }
-
-#ifdef PAUSE_FRAMES
-        if (-1 != intersectedIndex) { // if we're lookin at somethin
-            printf("%d,%d: t_hc:%lf t_0:%f r:%f [%ld] {%f, %f, %f}->{%f, %f, %f}\n", x, y, min_t_hc, t_0,
-                   spheresInfo->radii[intersectedIndex], intersectedIndex,
-                   pixWorldCoord.x, pixWorldCoord.y, pixWorldCoord.z,
-                   spheresInfo->centers[intersectedIndex].x, spheresInfo->centers[intersectedIndex].y, spheresInfo->centers[intersectedIndex].z);
-        }
-#endif // PAUSE_FRAMES
 
         // === DRAW STUFFS ===
-
         uchar4 tmpPixData = make_uchar4(0, 0, 0, 255);
-        // uchar4 tmpPixData = make_uchar4((x + (int)(glfwTime * 3)) * 100 % 256, (y + (int)(glfwTime)) * 100 % 256, 0, 255);
 
-        if (min_t_hc < FLT_MAX) {
-            tmpPixData = make_uchar4(255, 255, 255, 255);
+        if (-1 != intersectedIndex) { // if we're lookin at somethin
+            float3 intersectionPoint = D * t_0 + camInfo->center;
+            float3 intersectionNormal = normalize(intersectionPoint - spheresInfo->centers[intersectedIndex]);
+
+#ifdef PAUSE_FRAMES
+            printf("%d,%d: t_hc:%lf t_0:%f r:%f [%ld] {%f, %f, %f}->{%f, %f, %f} (C_S:{%f, %f, %f})\n", x, y, min_t_hc, t_0,
+                   spheresInfo->radii[intersectedIndex], intersectedIndex,
+                   pixWorldCoord.x, pixWorldCoord.y, pixWorldCoord.z,
+                   intersectionPoint.x, intersectionPoint.y, intersectionPoint.z,
+                   spheresInfo->centers[intersectedIndex].x, spheresInfo->centers[intersectedIndex].y, spheresInfo->centers[intersectedIndex].z);
+#endif // PAUSE_FRAMES
+
+            float3 ambient = {0, 0, 0};
+            float3 diffuse = {0, 0, 0};
+            float3 specular = {0, 0, 0};
+            for(uint i = 0; i < lightsCount; ++i) {
+                float3 lightPos = lightsInfo->centers[i];
+                float3 lightColor = lightsInfo->colors[i];
+                float3 lightDir = normalize(lightPos - intersectionPoint);
+                ambient += lightColor * lightsInfo->ambientStrength;
+
+                float diffuseStrength = max(dot(intersectionNormal, lightDir), 0.0F);
+                diffuse += lightColor * diffuseStrength;
+            }
+
+            float3 color = (ambient + diffuse + specular) * 255;
+
+#ifdef PAUSE_FRAMES
+            printf("A:{%f, %f, %f}|D:{%f, %f, %f}|S:{%f, %f, %f}|C:{%f, %f, %f}\n",
+                   ambient.x, ambient.y, ambient.z,
+                   diffuse.x, diffuse.y, diffuse.z,
+                   specular.x, specular.y, specular.z,
+                   color.x, color.y, color.z);
+#endif // PAUSE_FRAMES
+
+            tmpPixData = make_uchar4(color.x, color.y, color.z, 255);
+
         }
 
         // manually flip texture at the last moment, I dont remember why but opengl goofs up the texture otherwise
@@ -310,8 +356,8 @@ __global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, CameraI
 constexpr uint SCR_WIDTH = 800;
 constexpr uint SCR_HEIGHT = 600;
 
-constexpr uint CU_TEX_WIDTH = 16;
-constexpr uint CU_TEX_HEIGHT = 9;
+constexpr uint CU_TEX_WIDTH = 1920;
+constexpr uint CU_TEX_HEIGHT = 1080;
 
 constexpr uint SPHERE_COUNT = 1000;
 constexpr uint LIGHT_COUNT = 10;
@@ -542,9 +588,13 @@ auto main() -> int {
     checkCudaErrors(cudaMalloc(&spheresInfo->radii, sizeof(float) * SPHERE_COUNT));
     Lights* lightsInfo = nullptr;
     checkCudaErrors(cudaMallocManaged(&lightsInfo, sizeof(Lights)));
-    checkCudaErrors(cudaMalloc(&lightsInfo->centers, sizeof(float) * LIGHT_COUNT));
+    checkCudaErrors(cudaMalloc(&lightsInfo->centers, sizeof(float3) * LIGHT_COUNT));
+    checkCudaErrors(cudaMalloc(&lightsInfo->colors, sizeof(float3) * LIGHT_COUNT));
 
-    // Define your min and max values here
+    // tmp? idk
+    lightsInfo->attenuation = {1, 0.05, 0.05};
+    lightsInfo->ambientStrength = 0.1 / LIGHT_COUNT;
+
     float3 centerMin = {5, 5, 5};
     float3 centerMax = {500, 500, 500};
     float radiusMin = 1;
@@ -561,7 +611,7 @@ auto main() -> int {
     uint lightSeed = RAND_SEED;
 #else // !RAND_SEED
     uint sphereSeed = time(nullptr);
-    uint lightSeed = time(nullptr);
+    uint lightSeed = time(nullptr) + 1;
 #endif // RAND_SEED
 
     initRand<<<(SPHERE_COUNT + 255) / 256, 256>>>(sphereSeed, sphereRandStates); // preset seeds for easier debugging, for now
