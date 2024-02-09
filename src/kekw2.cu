@@ -15,14 +15,16 @@
 
 #include "helper_cuda.h"
 
-constexpr uint SCR_WIDTH = 800; // ???
-constexpr uint SCR_HEIGHT = 600;
+#include "Keyboard.hpp"
 
 constexpr uint CU_TEX_WIDTH = 1920;
 constexpr uint CU_TEX_HEIGHT = 1080;
 
 constexpr uint SPHERE_COUNT = 1000;
 constexpr uint LIGHT_COUNT = 10;
+
+constexpr float MOVE_SPEED = 0.3F;
+constexpr float ROT_SPEED = 0.008F;
 
 // callbacks
 void glfw_error_callback(int error, const char* description) {
@@ -37,6 +39,8 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
 }
 
+KeyboardState keyboardState;
+
 void key_callback(GLFWwindow* window, int key, int scancode, int action,
                  int mods) {
     (void)scancode;
@@ -47,7 +51,22 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action,
     // close if Esc pressed
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, GLFW_TRUE);
+    } else {
+        keyboardState.handleKeyPress(key, action != GLFW_RELEASE);
+
+#ifdef DEBUG_KEYBOARD
+        float3 positionDelta = keyboardState.getPositionDelta(); 
+        float3 eulerDelta = keyboardState.getEulerDelta(); 
+        printf("Pos Delta: {%f, %f, %f}, Euler Delta: {%f, %f, %f}\n",
+               positionDelta.x, positionDelta.y, positionDelta.z,
+               eulerDelta.x, eulerDelta.y, eulerDelta.z
+               );
+#endif // DEBUG_KEYBOARD
     }
+}
+
+__device__ __host__ auto deg2rad(float degs) -> float {
+    return degs * M_PI / 180;
 }
 
 using CameraInfo = struct CameraInfo_ {
@@ -56,10 +75,6 @@ using CameraInfo = struct CameraInfo_ {
     float fovDegrees; // radians?
     float3 eulerAngles;
 };
-
-__device__ __host__ auto deg2rad(float degs) -> float {
-    return degs * M_PI / 180;
-}
 
 // SOA type stuff ig?
 struct Spheres {
@@ -280,9 +295,8 @@ __global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, CameraI
                rayDirection.x, rayDirection.y, rayDirection.z);
 #endif // PAUSE_FRAMES
 
-        float min_t_hc = FLT_MAX;
-        float t_0 = NAN;
-        //float t_1 = NAN;
+        float t_hc = NAN;
+        float t_0 = FLT_MAX;
         long intersectedIndex = -1; // will just use -1 for "no intersection"
 
         for (uint i = 0; i < sphereCount; ++i) {
@@ -301,15 +315,15 @@ __global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, CameraI
                 continue;
             }
 
-            float t_hc = sqrt(currentRadius * currentRadius - d * d);
-            if (t_hc > min_t_hc) { // blocked by some closer sphere
+            float curr_t_hc = sqrt(currentRadius * currentRadius - d * d);
+            float curr_t_0 = t_ca - curr_t_hc;
+            if (curr_t_0 > t_0) { // blocked by some closer sphere
                 continue;
             }
 
-            min_t_hc = t_hc;
+            t_hc = curr_t_hc;
             intersectedIndex = i;
-            t_0 = t_ca - t_hc;
-            //t_1 = t_ca + t_hc;
+            t_0 = curr_t_0;
         }
 
         // === DRAW STUFFS ===
@@ -322,7 +336,7 @@ __global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, CameraI
             float3 intersectionNormal = normalize(intersectionPoint - spheresInfo->centers[intersectedIndex]);
 
 #ifdef PAUSE_FRAMES
-            printf("%d,%d: t_hc:%lf t_0:%f r:%f [%ld] {%f, %f, %f}->{%f, %f, %f} (C_S:{%f, %f, %f})\n", x, y, min_t_hc, t_0,
+            printf("%d,%d: t_hc:%lf t_0:%f r:%f [%ld] {%f, %f, %f}->{%f, %f, %f} (C_S:{%f, %f, %f})\n", x, y, t_hc, t_0,
                    spheresInfo->radii[intersectedIndex], intersectedIndex,
                    pixWorldCoord.x, pixWorldCoord.y, pixWorldCoord.z,
                    intersectionPoint.x, intersectionPoint.y, intersectionPoint.z,
@@ -439,7 +453,7 @@ auto main() -> int {
     // create a window and context, check for errors,
     // make this window current
     GLFWwindow* window = glfwCreateWindow(
-        SCR_WIDTH, SCR_HEIGHT, "IM GLing LESSGOOO", nullptr, nullptr);
+        CU_TEX_WIDTH, CU_TEX_HEIGHT, "IM GLing LESSGOOO", nullptr, nullptr);
     if (window == nullptr) {
         std::cerr << "Failed to create GLFW window\n";
         glfwTerminate();
@@ -455,7 +469,7 @@ auto main() -> int {
     }
 
     // set the viewport dimensions?
-    glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
+    glViewport(0, 0, CU_TEX_WIDTH, CU_TEX_HEIGHT);
 
     // set callbacks for window resizes and keystrokes
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
@@ -679,6 +693,18 @@ auto main() -> int {
     checkCudaErrors(cudaDeviceSynchronize());
 
     // ===
+    // === Cam Setup
+    // ===
+    CameraInfo* camInfo = nullptr;
+
+    checkCudaErrors(cudaMallocManaged(&camInfo, sizeof(CameraInfo)));
+    memset(camInfo, 0, sizeof(CameraInfo));
+
+    // TODO: get this from current reso or summink?
+    camInfo->imageResolution = make_uint2(CU_TEX_WIDTH, CU_TEX_HEIGHT);
+    camInfo->fovDegrees = 90;
+
+    // ===
     // === RENDER LOOP
     // ===
     while (glfwWindowShouldClose(window) == 0) {
@@ -717,12 +743,7 @@ auto main() -> int {
         // === Run the CUDA kernel
         dim3 block(16, 16);
         dim3 grid((CU_TEX_WIDTH + block.x - 1) / block.x, (CU_TEX_HEIGHT + block.y - 1) / block.y);
-        CameraInfo* camInfo;
-        checkCudaErrors(cudaMallocManaged(&camInfo, sizeof(CameraInfo)));
-        memset(camInfo, 0, sizeof(CameraInfo));
-        // TODO: get this from current reso or summink?
-        camInfo->imageResolution = make_uint2(CU_TEX_WIDTH, CU_TEX_HEIGHT);
-        camInfo->fovDegrees = 90;
+
         write_texture_kernel<<<grid, block>>>(output_surface, camInfo, spheresInfo, SPHERE_COUNT, lightsInfo, LIGHT_COUNT, glfwTime);
         checkCudaErrors(cudaDeviceSynchronize());
 
@@ -756,6 +777,8 @@ auto main() -> int {
 #endif // DEBUG_TIMINGS
 
         glfwPollEvents();
+        camInfo->center += keyboardState.getPositionDelta() * MOVE_SPEED;
+        camInfo->eulerAngles += keyboardState.getEulerDelta() * ROT_SPEED;
 
 #ifdef PAUSE_FRAMES
         getchar(); // tmp boonk for going frame by frame
