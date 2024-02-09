@@ -15,6 +15,15 @@
 
 #include "helper_cuda.h"
 
+constexpr uint SCR_WIDTH = 800; // ???
+constexpr uint SCR_HEIGHT = 600;
+
+constexpr uint CU_TEX_WIDTH = 1920;
+constexpr uint CU_TEX_HEIGHT = 1080;
+
+constexpr uint SPHERE_COUNT = 1000;
+constexpr uint LIGHT_COUNT = 10;
+
 // callbacks
 void glfw_error_callback(int error, const char* description) {
     fprintf(stderr, "Oops![0x%08X]: %s\n", error, description);
@@ -185,16 +194,54 @@ auto __device__ __host__ dot(const float3& lhs, const float3& rhs) -> float {
     return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
 }
 
-auto __device__ __host__ operator/(const float3& lhs, const float& rhs) -> float3 {
+// pure spaghetti code, yikes
+// TODO: template-ize this crap
+auto __device__ __host__ clamp(float3& vec, float min, float max) -> float3 {
+    if (vec.x < min) {
+        vec.x = min;
+    } else if (vec.x > max) {
+        vec.x = max;
+    }
+
+    if (vec.y < min) {
+        vec.y = min;
+    } else if (vec.y > max) {
+        vec.y = max;
+    }
+
+    if (vec.z < min) {
+        vec.z = min;
+    } else if (vec.z > max) {
+        vec.z = max;
+    }
+
+    return vec;
+}
+
+auto __device__ __host__ operator/(const float3& lhs, float rhs) -> float3 {
     return {lhs.x / rhs, lhs.y / rhs, lhs.z / rhs};
 }
 
-auto __device__ __host__ operator*(const float3& lhs, const float& rhs) -> float3 {
+auto __device__ __host__ operator*(const float3& lhs, float rhs) -> float3 {
     return {lhs.x * rhs, lhs.y * rhs, lhs.z * rhs};
 }
 
+auto __device__ __host__ operator-(const float3& vec) -> float3 {
+    return vec * -1.0F;
+}
+
+auto __device__ __host__ abs(const float3& vec) -> float {
+    return sqrt(dot(vec, vec));
+}
+
 auto __device__ __host__ normalize(const float3& vec) -> float3 {
-    return vec / sqrt(dot(vec, vec));
+    return vec / abs(vec);
+}
+
+// yoinked from here: https://registry.khronos.org/OpenGL-Refpages/gl4/html/reflect.xhtml
+// hopefully it just does what it says on the box (lhs reflected through rhs ig?) and I didn't mess up (💀💀)
+auto __device__ __host__ reflect(const float3& lhs, const float3& rhs) -> float3 {
+    return lhs - rhs * dot(lhs, rhs) * 2.0F;
 }
 
 __global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, CameraInfo* camInfo,
@@ -269,6 +316,8 @@ __global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, CameraI
         uchar4 tmpPixData = make_uchar4(0, 0, 0, 255);
 
         if (-1 != intersectedIndex) { // if we're lookin at somethin
+            // Lighting Setup from here:
+            // https://learnopengl.com/Lighting/Basic-Lighting
             float3 intersectionPoint = D * t_0 + camInfo->center;
             float3 intersectionNormal = normalize(intersectionPoint - spheresInfo->centers[intersectedIndex]);
 
@@ -286,14 +335,29 @@ __global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, CameraI
             for(uint i = 0; i < lightsCount; ++i) {
                 float3 lightPos = lightsInfo->centers[i];
                 float3 lightColor = lightsInfo->colors[i];
-                float3 lightDir = normalize(lightPos - intersectionPoint);
+                float3 lightVec = lightPos - intersectionPoint;
+                float3 lightDir = normalize(lightVec);
+                float lightDistance = abs(lightVec);
+
                 ambient += lightColor * lightsInfo->ambientStrength;
 
+                float attenuation = 1 / (lightsInfo->attenuation.x
+                    + lightsInfo->attenuation.y * lightDistance
+                    + lightsInfo->attenuation.z * lightDistance * lightDistance);
+
                 float diffuseStrength = max(dot(intersectionNormal, lightDir), 0.0F);
-                diffuse += lightColor * diffuseStrength;
+                diffuse += lightColor * diffuseStrength * attenuation;
+
+                float specularIntensity = 0.5;
+                float3 viewDir = normalize(camInfo->center - intersectionPoint);
+                float3 reflectDir = reflect(-lightDir, intersectionNormal);
+                float shininess = 32; // TODO: move this somewhere else?
+                auto specularStrength = static_cast<float>(pow( max(dot(viewDir, reflectDir), 0.0F), shininess));
+                specular += lightColor * specularIntensity * specularStrength * attenuation;
             }
 
             float3 color = (ambient + diffuse + specular) * 255;
+            color = clamp(color, 0, 255); // just in case lol, idk
 
 #ifdef PAUSE_FRAMES
             printf("A:{%f, %f, %f}|D:{%f, %f, %f}|S:{%f, %f, %f}|C:{%f, %f, %f}\n",
@@ -304,7 +368,6 @@ __global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, CameraI
 #endif // PAUSE_FRAMES
 
             tmpPixData = make_uchar4(color.x, color.y, color.z, 255);
-
         }
 
         // manually flip texture at the last moment, I dont remember why but opengl goofs up the texture otherwise
@@ -353,14 +416,6 @@ __global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, CameraI
     glErrorVal; \
 }))
 
-constexpr uint SCR_WIDTH = 800;
-constexpr uint SCR_HEIGHT = 600;
-
-constexpr uint CU_TEX_WIDTH = 1920;
-constexpr uint CU_TEX_HEIGHT = 1080;
-
-constexpr uint SPHERE_COUNT = 1000;
-constexpr uint LIGHT_COUNT = 10;
 auto main() -> int {
     // ===
     // === GLFW STUFFS
@@ -410,10 +465,10 @@ auto main() -> int {
     // === SHADER STUFFS (Rect VAO, VBO, EBO)
     // ===
     float positions[] = {
-        0.5F,  0.5F,  0.0F,  // top right
-        0.5F,  -0.5F, 0.0F,  // bottom right
-        -0.5F, -0.5F, 0.0F,  // bottom left
-        -0.5F, 0.5F,  0.0F   // top left
+        1.0F,  1.0F,  0.0F,  // top right
+        1.0F,  -1.0F, 0.0F,  // bottom right
+        -1.0F, -1.0F, 0.0F,  // bottom left
+        -1.0F, 1.0F,  0.0F   // top left
     };
 
     float colors[] = {
@@ -591,8 +646,8 @@ auto main() -> int {
     checkCudaErrors(cudaMalloc(&lightsInfo->centers, sizeof(float3) * LIGHT_COUNT));
     checkCudaErrors(cudaMalloc(&lightsInfo->colors, sizeof(float3) * LIGHT_COUNT));
 
-    // tmp? idk
-    lightsInfo->attenuation = {1, 0.05, 0.05};
+    // Hand picked for decent (-ish) scaling up to 500 units, probably should tweak depending on how far out the lights might be
+    lightsInfo->attenuation = {1, 0.001, 0.00002};
     lightsInfo->ambientStrength = 0.1 / LIGHT_COUNT;
 
     float3 centerMin = {5, 5, 5};
