@@ -263,8 +263,7 @@ auto __device__ __host__ reflect(const float3& lhs, const float3& rhs) -> float3
 
 __global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, CameraInfo* camInfo,
                                      Spheres* spheresInfo, uint sphereCount,
-                                     Lights* lightsInfo, uint lightsCount,
-                                     float glfwTime) {
+                                     Lights* lightsInfo, uint lightsCount) {
     uint x = blockIdx.x * blockDim.x + threadIdx.x;
     uint y = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -746,7 +745,7 @@ auto main() -> int {
         dim3 block(16, 16);
         dim3 grid((CU_TEX_WIDTH + block.x - 1) / block.x, (CU_TEX_HEIGHT + block.y - 1) / block.y);
 
-        write_texture_kernel<<<grid, block>>>(output_surface, camInfo, spheresInfo, SPHERE_COUNT, lightsInfo, LIGHT_COUNT, glfwTime);
+        write_texture_kernel<<<grid, block>>>(output_surface, camInfo, spheresInfo, SPHERE_COUNT, lightsInfo, LIGHT_COUNT);
         checkCudaErrors(cudaDeviceSynchronize());
 
         // Unmap the texture so that OpenGL can use it
