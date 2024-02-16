@@ -18,9 +18,9 @@
 #ifndef KEYBOARD_H
 #define KEYBOARD_H
 
-#include <GLFW/glfw3.h>
-
 #include <cuda_runtime.h>
+
+#include <GLFW/glfw3.h>
 
 class KeyPair {
 private:
@@ -75,41 +75,41 @@ public:
 
 		switch (key) {
 			case GLFW_KEY_A:
-				leftRight.setPressed(KB_LEFT, isPressed);
+				leftRight.setPressed(0U != KB_LEFT, isPressed);
 				break;
 			case GLFW_KEY_D:
-				leftRight.setPressed(KB_RIGHT, isPressed);
+				leftRight.setPressed(0U != KB_RIGHT, isPressed);
 				break;
 			case GLFW_KEY_E:
-				upDown.setPressed(KB_UP, isPressed);
+				upDown.setPressed(0U != KB_UP, isPressed);
 				break;
 			case GLFW_KEY_Q:
-				upDown.setPressed(KB_DOWN, isPressed);
+				upDown.setPressed(0U != KB_DOWN, isPressed);
 				break;
 			case GLFW_KEY_W:
-				forwardBackward.setPressed(KB_FORWARD, isPressed);
+				forwardBackward.setPressed(0U != KB_FORWARD, isPressed);
 				break;
 			case GLFW_KEY_S:
-				forwardBackward.setPressed(KB_BACKWARD, isPressed);
+				forwardBackward.setPressed(0U != KB_BACKWARD, isPressed);
 				break;
 
 			case GLFW_KEY_J:
-				gamma.setPressed(KB_GAMMA_UP, isPressed);
+				gamma.setPressed(0U != KB_GAMMA_UP, isPressed);
 				break;
 			case GLFW_KEY_L:
-				gamma.setPressed(KB_GAMMA_DOWN, isPressed);
+				gamma.setPressed(0U != KB_GAMMA_DOWN, isPressed);
 				break;
 			case GLFW_KEY_I:
-				alpha.setPressed(KB_ALPHA_DOWN, isPressed);
+				alpha.setPressed(0U != KB_ALPHA_DOWN, isPressed);
 				break;
 			case GLFW_KEY_K:
-				alpha.setPressed(KB_ALPHA_UP, isPressed);
+				alpha.setPressed(0U != KB_ALPHA_UP, isPressed);
 				break;
 			case GLFW_KEY_U:
-				beta.setPressed(KB_BETA_DOWN, isPressed);
+				beta.setPressed(0U != KB_BETA_DOWN, isPressed);
 				break;
 			case GLFW_KEY_O:
-				beta.setPressed(KB_BETA_UP, isPressed);
+				beta.setPressed(0U != KB_BETA_UP, isPressed);
 				break;
 
 			default: // ??
@@ -118,11 +118,15 @@ public:
 	}
 
 	[[ nodiscard ]] auto getPositionDelta() const -> float3 {
-		return { leftRight.getDirection(), upDown.getDirection(), forwardBackward.getDirection() };
+		return { static_cast<float>(leftRight.getDirection()),
+			static_cast<float>(upDown.getDirection()),
+			static_cast<float>(forwardBackward.getDirection()) };
 	}
 
 	[[ nodiscard ]] auto getEulerDelta() const -> float3 {
-		return { alpha.getDirection(), gamma.getDirection(), beta.getDirection() };
+		return { static_cast<float>(alpha.getDirection()),
+			static_cast<float>(gamma.getDirection()),
+			static_cast<float>(beta.getDirection()) };
 	}
 };
 

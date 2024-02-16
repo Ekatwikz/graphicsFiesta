@@ -13,7 +13,7 @@
 #include "helper_cuda.h"
 
 // mine stuffs:
-#include "Keyboard.hpp"
+#include "Keyboard.cuh"
 #include "cameraStuff.cuh"
 #include "initKernels.cuh"
 #include "mathHelpers.cuh"
