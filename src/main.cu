@@ -1,4 +1,3 @@
-#include <cfloat>
 #include "shaderProgram.hpp"
 
 #define GLFW_INCLUDE_NONE
@@ -6,8 +5,6 @@
 
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
-#include <curand_kernel.h>
-#include <cmath>
 #include <unistd.h>
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -15,421 +12,29 @@
 
 #include "helper_cuda.h"
 
+// mine stuffs:
 #include "Keyboard.hpp"
+#include "cameraStuff.cuh"
+#include "initKernels.cuh"
+#include "mathHelpers.cuh"
+
+// my le raycasting
+#include "raycastKernel.cuh"
 
 constexpr uint CU_TEX_WIDTH = 1920;
 constexpr uint CU_TEX_HEIGHT = 1080;
 
 constexpr uint SPHERE_COUNT = 1000;
 constexpr uint LIGHT_COUNT = 10;
-
+ 
 constexpr float MOVE_SPEED = 0.3F;
 constexpr float ROT_SPEED = 0.008F;
 
-// callbacks
-void glfw_error_callback(int error, const char* description) {
-    fprintf(stderr, "Oops![0x%08X]: %s\n", error, description);
-    glfwTerminate();
-    exit(EXIT_FAILURE);
-}
-
-void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
-    (void)window;
-    std::cerr << "Resized to: " << width << 'x' << height << '\n';
-    glViewport(0, 0, width, height);
-}
-
 KeyboardState keyboardState;
 
-void key_callback(GLFWwindow* window, int key, int scancode, int action,
-                 int mods) {
-    (void)scancode;
-    (void)mods;
-
-#ifdef DEBUG_KEYBOARD
-    printf("Key:%d Action:%d\n", key, action);
-#endif // DEBUG_KEYBOARD
-
-    // close if Esc pressed
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
-        glfwSetWindowShouldClose(window, GLFW_TRUE);
-    } else {
-        keyboardState.handleKeyPress(key, action != GLFW_RELEASE);
-
-#ifdef DEBUG_KEYBOARD
-        float3 positionDelta = keyboardState.getPositionDelta(); 
-        float3 eulerDelta = keyboardState.getEulerDelta(); 
-        printf("Pos Delta: {%f, %f, %f}, Euler Delta: {%f, %f, %f}\n",
-               positionDelta.x, positionDelta.y, positionDelta.z,
-               eulerDelta.x, eulerDelta.y, eulerDelta.z
-               );
-#endif // DEBUG_KEYBOARD
-    }
-}
-
-__device__ __host__ auto deg2rad(float degs) -> float {
-    return degs * M_PI / 180;
-}
-
-using CameraInfo = struct CameraInfo_ {
-    float3 center;
-    uint2 imageResolution;
-    float fovDegrees; // radians?
-    float3 eulerAngles;
-};
-
-// SOA type stuff ig?
-struct Spheres {
-    float3* centers;
-    float* radii;
-};
-struct Lights {
-    float3* centers;
-    float3* colors;
-    float3 attenuation;
-    float ambientStrength;
-};
-
-__global__ void initRand(unsigned int seed, curandState_t* states) {
-    uint idx = threadIdx.x + blockIdx.x * blockDim.x;
-    curand_init(seed, idx, 0, &states[idx]);
-}
-
-__global__ void initSpheres(Spheres* spheres, float3 centerMin, float3 centerMax, float radiusMin, float radiusMax, uint numSpheres, curandState_t* states) {
-    uint idx = threadIdx.x + blockIdx.x * blockDim.x;
-
-    if (idx < numSpheres) {
-        curandState_t state = states[idx];
-        spheres->centers[idx] = {
-            (centerMin.x + curand_uniform(&state) * (centerMax.x - centerMin.x)) * (curand_uniform(&state) > 0.5F ? 1 : -1),
-            (centerMin.y + curand_uniform(&state) * (centerMax.y - centerMin.y)) * (curand_uniform(&state) > 0.5F ? 1 : -1),
-            (centerMin.z + curand_uniform(&state) * (centerMax.z - centerMin.z)) * (curand_uniform(&state) > 0.5F ? 1 : -1)
-        };
-
-        spheres->radii[idx] = radiusMin + curand_uniform(&state) * (radiusMax - radiusMin);
-
-#ifdef PAUSE_FRAMES
-        printf("[%d]: C_S:{%lf,%lf,%lf}|R:%lf\n", idx,
-               spheres->centers[idx].x, spheres->centers[idx].y, spheres->centers[idx].z,
-               spheres->radii[idx]);
-#endif // PAUSE_FRAMES
-    }
-}
-
-__global__ void initLights(Lights* lights, float3 centerMin, float3 centerMax,  uint numLights, curandState_t* states) {
-    uint idx = threadIdx.x + blockIdx.x * blockDim.x;
-
-    if (idx < numLights) {
-        curandState_t state = states[idx];
-        lights->centers[idx] = {
-            (centerMin.x + curand_uniform(&state) * (centerMax.x - centerMin.x)) * (curand_uniform(&state) > 0.5F ? 1 : -1),
-            (centerMin.y + curand_uniform(&state) * (centerMax.y - centerMin.y)) * (curand_uniform(&state) > 0.5F ? 1 : -1),
-            (centerMin.z + curand_uniform(&state) * (centerMax.z - centerMin.z)) * (curand_uniform(&state) > 0.5F ? 1 : -1)
-        };
-
-        lights->colors[idx] = {
-            curand_uniform(&state),
-            curand_uniform(&state),
-            curand_uniform(&state)
-        };
-
-#ifdef PAUSE_FRAMES
-        printf("[%d]: C_L:{%lf,%lf,%lf}, C:{%f, %f, %f}\n", idx,
-               lights->centers[idx].x, lights->centers[idx].y, lights->centers[idx].z,
-               lights->colors[idx].x, lights->colors[idx].y, lights->colors[idx].z) ;
-#endif // PAUSE_FRAMES
-    }
-}
-
-struct Matrix4x4f {
-    float4 rows[4];
-
-    __device__ __host__ Matrix4x4f(const float4& row1, const float4& row2, const float4& row3, const float4& row4) {
-        rows[0] = row1;
-        rows[1] = row2;
-        rows[2] = row3;
-        rows[3] = row4;
-    }
-
-    __device__ __host__ Matrix4x4f() : Matrix4x4f{{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}} {}
-
-    __device__ __host__ Matrix4x4f(const float3& euler_angles, const float3& camera_position) : Matrix4x4f{} {
-        //  https://en.wikipedia.org/wiki/Euler_angles#Rotation_matrix
-        float c_1 = cosf(euler_angles.x);
-        float s_1 = sinf(euler_angles.x);
-        float c_2 = cosf(euler_angles.y);
-        float s_2 = sinf(euler_angles.y);
-        float c_3 = cosf(euler_angles.z);
-        float s_3 = sinf(euler_angles.z);
-
-        rows[0] = make_float4(c_1 * c_2 * c_3 - s_1 * s_3, -c_3 * s_1 - c_1 * c_2 * s_3, c_1 * s_2, camera_position.x);
-        rows[1] = make_float4(c_1 * s_3 + c_2 * c_3 * s_1, c_1 * c_3 - c_2 * s_1 * s_3, s_1 * s_2, camera_position.y);
-        rows[2] = make_float4(-c_3 * s_2, s_2 * s_3, c_2, camera_position.z);
-    }
-
-    __inline__ __device__ __host__ auto operator*(const float4& vec) const -> float4 {
-        float4 result;
-        result.x = rows[0].x * vec.x + rows[0].y * vec.y + rows[0].z * vec.z + rows[0].w * vec.w;
-        result.y = rows[1].x * vec.x + rows[1].y * vec.y + rows[1].z * vec.z + rows[1].w * vec.w;
-        result.z = rows[2].x * vec.x + rows[2].y * vec.y + rows[2].z * vec.z + rows[2].w * vec.w;
-        result.w = rows[3].x * vec.x + rows[3].y * vec.y + rows[3].z * vec.z + rows[3].w * vec.w;
-        return result;
-    }
-
-    __inline__  __device__ __host__ auto operator*(const float3& vec) const -> float3 {
-        float4 result = *this * make_float4(vec.x, vec.y, vec.z, 1);
-        return make_float3(result.x, result.y, result.z);
-    }
-
-    // b/c they're referring to different printfs?
-#define PRINT_MATRIX() do { \
-        printf("{"); \
-        for (const auto& row : rows) { \
-            printf("{%f %f %f %f},\n", row.x, row.y, row.z, row.w); \
-        } \
-        printf("}"); \
-} while(0)
-
-    __device__ void d_display() const { PRINT_MATRIX(); }
-
-    __host__ void h_display() const { PRINT_MATRIX(); }
-};
-
-auto __device__ __host__ operator-(const float3& lhs, const float3& rhs) -> float3 {
-    return {lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z};
-}
-
-auto __device__ __host__ operator+(const float3& lhs, const float3& rhs) -> float3 {
-    return {lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z};
-}
-
-auto __device__ __host__ operator+=(float3& lhs, const float3& rhs) -> float3 {
-    return lhs = lhs + rhs;
-}
-
-auto __device__ __host__ dot(const float3& lhs, const float3& rhs) -> float {
-    return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
-}
-
-// pure spaghetti code, yikes
-// TODO: template-ize this crap
-auto __device__ __host__ clamp(float3& vec, float min, float max) -> float3 {
-    if (vec.x < min) {
-        vec.x = min;
-    } else if (vec.x > max) {
-        vec.x = max;
-    }
-
-    if (vec.y < min) {
-        vec.y = min;
-    } else if (vec.y > max) {
-        vec.y = max;
-    }
-
-    if (vec.z < min) {
-        vec.z = min;
-    } else if (vec.z > max) {
-        vec.z = max;
-    }
-
-    return vec;
-}
-
-auto __device__ __host__ operator/(const float3& lhs, float rhs) -> float3 {
-    return {lhs.x / rhs, lhs.y / rhs, lhs.z / rhs};
-}
-
-auto __device__ __host__ operator*(const float3& lhs, float rhs) -> float3 {
-    return {lhs.x * rhs, lhs.y * rhs, lhs.z * rhs};
-}
-
-auto __device__ __host__ operator-(const float3& vec) -> float3 {
-    return vec * -1.0F;
-}
-
-auto __device__ __host__ abs(const float3& vec) -> float {
-    return sqrt(dot(vec, vec));
-}
-
-auto __device__ __host__ normalize(const float3& vec) -> float3 {
-    return vec / abs(vec);
-}
-
-// yoinked from here: https://registry.khronos.org/OpenGL-Refpages/gl4/html/reflect.xhtml
-// hopefully it just does what it says on the box (lhs reflected through rhs ig?) and I didn't mess up (💀💀)
-auto __device__ __host__ reflect(const float3& lhs, const float3& rhs) -> float3 {
-    return lhs - rhs * dot(lhs, rhs) * 2.0F;
-}
-
-__global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, CameraInfo* camInfo,
-                                     Spheres* spheresInfo, uint sphereCount,
-                                     Lights* lightsInfo, uint lightsCount) {
-    uint x = blockIdx.x * blockDim.x + threadIdx.x;
-    uint y = blockIdx.y * blockDim.y + threadIdx.y;
-
-    uint width = camInfo->imageResolution.x;
-    uint height = camInfo->imageResolution.y;
-
-    float fovScale = tan(deg2rad(camInfo->fovDegrees / 2));
-
-    if (x < width && y < height) {
-        uint2 pixel = make_uint2(x, y);
-        double2 pixelNDC = make_double2((pixel.x + 0.5) / width, (pixel.y + 0.5) / height);
-
-        float aspectRatio = 1.0F * width / height;
-        float2 pixCam = make_float2((2 * pixelNDC.x - 1) * aspectRatio * fovScale,
-                                      (1 - 2 * pixelNDC.y) * fovScale);
-        float3 pixCamCoord = make_float3(pixCam.x, pixCam.y, -1);
-
-        Matrix4x4f camToWorld{camInfo->eulerAngles, camInfo->center};
-        float3 pixWorldCoord = camToWorld * pixCamCoord;
-        float3 rayDirection = pixWorldCoord - camInfo->center;
-        float3 D = normalize(rayDirection);
-
-#ifdef PAUSE_FRAMES
-        //camToWorld.d_display();
-        printf("Pix:{%d,%d}|NDC:{%lf,%lf}|Cam:{%lf,%lf}|World:{%lf,%lf,%lf}|Dir:{%lf,%lf,%lf}\n",
-               pixel.x, pixel.y,
-               pixelNDC.x, pixelNDC.y,
-               pixCam.x, pixCam.y,
-               pixWorldCoord.x, pixWorldCoord.y, pixWorldCoord.z,
-               rayDirection.x, rayDirection.y, rayDirection.z);
-#endif // PAUSE_FRAMES
-
-        float t_hc = NAN;
-        float t_0 = FLT_MAX;
-        long intersectedIndex = -1; // will just use -1 for "no intersection"
-
-        for (uint i = 0; i < sphereCount; ++i) {
-            // Geometric solution from:
-            // https://github.com/scratchapixel/website/blob/main/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-sphere-intersection.md?plain=1
-            float currentRadius = spheresInfo->radii[i];
-
-            float3 L = spheresInfo->centers[i] - camInfo->center;
-            float t_ca = dot(L, D);
-            if (t_ca < 0) { // sphere is behind
-                continue;
-            }
-
-            float d = sqrt(dot(L, L) - t_ca * t_ca);
-            if (d > spheresInfo->radii[i]) { // ray "missed"
-                continue;
-            }
-
-            float curr_t_hc = sqrt(currentRadius * currentRadius - d * d);
-            float curr_t_0 = t_ca - curr_t_hc;
-            if (curr_t_0 > t_0) { // blocked by some closer sphere
-                continue;
-            }
-
-            t_hc = curr_t_hc;
-            intersectedIndex = i;
-            t_0 = curr_t_0;
-        }
-
-        // === DRAW STUFFS ===
-        uchar4 tmpPixData = make_uchar4(0, 0, 0, 255);
-
-        if (-1 != intersectedIndex) { // if we're lookin at somethin
-            // Lighting Setup from here:
-            // https://learnopengl.com/Lighting/Basic-Lighting
-            float3 intersectionPoint = D * t_0 + camInfo->center;
-            float3 intersectionNormal = normalize(intersectionPoint - spheresInfo->centers[intersectedIndex]);
-
-#ifdef PAUSE_FRAMES
-            printf("%d,%d: t_hc:%lf t_0:%f r:%f [%ld] {%f, %f, %f}->{%f, %f, %f} (C_S:{%f, %f, %f})\n", x, y, t_hc, t_0,
-                   spheresInfo->radii[intersectedIndex], intersectedIndex,
-                   pixWorldCoord.x, pixWorldCoord.y, pixWorldCoord.z,
-                   intersectionPoint.x, intersectionPoint.y, intersectionPoint.z,
-                   spheresInfo->centers[intersectedIndex].x, spheresInfo->centers[intersectedIndex].y, spheresInfo->centers[intersectedIndex].z);
-#endif // PAUSE_FRAMES
-
-            float3 ambient = {0, 0, 0};
-            float3 diffuse = {0, 0, 0};
-            float3 specular = {0, 0, 0};
-            for(uint i = 0; i < lightsCount; ++i) {
-                float3 lightPos = lightsInfo->centers[i];
-                float3 lightColor = lightsInfo->colors[i];
-                float3 lightVec = lightPos - intersectionPoint;
-                float3 lightDir = normalize(lightVec);
-                float lightDistance = abs(lightVec);
-
-                ambient += lightColor * lightsInfo->ambientStrength;
-
-                float attenuation = 1 / (lightsInfo->attenuation.x
-                    + lightsInfo->attenuation.y * lightDistance
-                    + lightsInfo->attenuation.z * lightDistance * lightDistance);
-
-                float diffuseStrength = max(dot(intersectionNormal, lightDir), 0.0F);
-                diffuse += lightColor * diffuseStrength * attenuation;
-
-                float specularIntensity = 0.5;
-                float3 viewDir = normalize(camInfo->center - intersectionPoint);
-                float3 reflectDir = reflect(-lightDir, intersectionNormal);
-                float shininess = 32; // TODO: move this somewhere else?
-                auto specularStrength = static_cast<float>(pow( max(dot(viewDir, reflectDir), 0.0F), shininess));
-                specular += lightColor * specularIntensity * specularStrength * attenuation;
-            }
-
-            float3 color = (ambient + diffuse + specular) * 255;
-            color = clamp(color, 0, 255); // just in case lol, idk
-
-#ifdef PAUSE_FRAMES
-            printf("A:{%f, %f, %f}|D:{%f, %f, %f}|S:{%f, %f, %f}|C:{%f, %f, %f}\n",
-                   ambient.x, ambient.y, ambient.z,
-                   diffuse.x, diffuse.y, diffuse.z,
-                   specular.x, specular.y, specular.z,
-                   color.x, color.y, color.z);
-#endif // PAUSE_FRAMES
-
-            tmpPixData = make_uchar4(color.x, color.y, color.z, 255);
-        }
-
-        // manually flip texture at the last moment, I dont remember why but opengl goofs up the texture otherwise
-        surf2Dwrite(tmpPixData, output_surface, x * sizeof(uchar4), height - 1 - y);
-    }
-}
-
-#define GLCHECK() (__extension__({\
-    GLenum glErrorVal; \
-    const char* glErrorName; \
-    while ((glErrorVal = glGetError()) != GL_NO_ERROR) { \
-        switch (glErrorVal) { \
-            case GL_INVALID_ENUM: \
-                glErrorName = TO_STR(GL_INVALID_ENUM); \
-                break; \
-            case GL_INVALID_VALUE: \
-                glErrorName = TO_STR(GL_INVALID_VALUE); \
-                break; \
-            case GL_INVALID_OPERATION: \
-                glErrorName = TO_STR(GL_INVALID_OPERATION); \
-                break; \
-            /* case GL_STACK_OVERFLOW: \
-                glErrorName = TO_STR(GL_STACK_OVERFLOW); \
-                break; \
-            case GL_STACK_UNDERFLOW: \
-                glErrorName = TO_STR(GL_STACK_UNDERFLOW); \
-                break; */ \
-            case GL_OUT_OF_MEMORY: \
-                glErrorName = TO_STR(GL_OUT_OF_MEMORY); \
-                break; \
-            case GL_INVALID_FRAMEBUFFER_OPERATION: \
-                glErrorName = TO_STR(GL_INVALID_FRAMEBUFFER_OPERATION); \
-                break; \
-            /* case GL_CONTEXT_LOST: \
-                 glErrorName = TO_STR(GL_CONTEXT_LOST); \
-                 break; \
-             case GL_TABLE_TOO_LARGE: \
-                 break; \
-                 glErrorName = TO_STR(GL_TABLE_TOO_LARGE); */ \
-            default: \
-                glErrorName = "???"; \
-                break; \
-        } \
-        fprintf(stderr, __FILE__ ":%d in %s | glGetError()->0x%08X (%s)\n", __LINE__, static_cast<const char*>(__func__), glErrorVal, glErrorName); \
-    } \
-    glErrorVal; \
-}))
+void glfw_error_callback(int error, const char* description);
+void framebuffer_size_callback(GLFWwindow* window, int width, int height);
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
 
 auto main() -> int {
     // ===
@@ -463,8 +68,7 @@ auto main() -> int {
     glfwMakeContextCurrent(window);
 
     // init the glad loader or something, not sure
-    if (gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress)) ==
-        0) {
+    if (gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress)) == 0) {
         std::cerr << "Failed to initialize GLAD\n";
         return 1;
     }
@@ -793,4 +397,42 @@ auto main() -> int {
     glDeleteBuffers(1, &rectangle_points_EBO);
     glfwDestroyWindow(window);
     glfwTerminate();
+}
+
+void glfw_error_callback(int error, const char* description) {
+    fprintf(stderr, "Oops![0x%08X]: %s\n", error, description);
+    glfwTerminate();
+    exit(EXIT_FAILURE);
+}
+
+void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
+    (void)window;
+    std::cerr << "Resized to: " << width << 'x' << height << '\n';
+    glViewport(0, 0, width, height);
+}
+
+void key_callback(GLFWwindow* window, int key, int scancode, int action,
+                 int mods) {
+    (void)scancode;
+    (void)mods;
+
+#ifdef DEBUG_KEYBOARD
+    printf("Key:%d Action:%d\n", key, action);
+#endif // DEBUG_KEYBOARD
+
+    // close if Esc pressed
+    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+        glfwSetWindowShouldClose(window, GLFW_TRUE);
+    } else {
+        keyboardState.handleKeyPress(key, action != GLFW_RELEASE);
+
+#ifdef DEBUG_KEYBOARD
+        float3 positionDelta = keyboardState.getPositionDelta(); 
+        float3 eulerDelta = keyboardState.getEulerDelta(); 
+        printf("Pos Delta: {%f, %f, %f}, Euler Delta: {%f, %f, %f}\n",
+               positionDelta.x, positionDelta.y, positionDelta.z,
+               eulerDelta.x, eulerDelta.y, eulerDelta.z
+               );
+#endif // DEBUG_KEYBOARD
+    }
 }

@@ -35,7 +35,7 @@ EXTENSION:=
 SOURCES:=$(wildcard $(SOURCEDIR)/*.cu)
 DEFAULTTARGETS:=$(patsubst $(SOURCEDIR)/%.cu, $(OUTPUTDIR)/%$(EXTENSION), $(SOURCES))
 LIBSOURCES:=$(wildcard $(LIBDIR)/*.cpp)
-LIBHEADERS:=$(foreach dir, $(INCLUDEDIRS), $(wildcard $(dir)/*.hpp))
+LIBHEADERS:=$(foreach dir, $(INCLUDEDIRS), $(wildcard $(dir)/*.hpp)) $(foreach dir, $(INCLUDEDIRS), $(wildcard $(dir)/*.cuh))
 OBJECTS:=$(patsubst $(LIBDIR)/%.cpp, $(OBJECTDIR)/%.o, $(LIBSOURCES))
 
 # kinda repetitve...
