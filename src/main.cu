@@ -427,7 +427,7 @@ __global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, CameraI
                 glErrorName = "???"; \
                 break; \
         } \
-        fprintf(stderr, __FILE__ ":%d in %s | glGetError()->0x%08X (%s)\n", __LINE__, __func__, glErrorVal, glErrorName); \
+        fprintf(stderr, __FILE__ ":%d in %s | glGetError()->0x%08X (%s)\n", __LINE__, static_cast<const char*>(__func__), glErrorVal, glErrorName); \
     } \
     glErrorVal; \
 }))
