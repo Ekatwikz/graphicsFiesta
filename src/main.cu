@@ -35,50 +35,13 @@ KeyboardState keyboardState;
 void glfw_error_callback(int error, const char* description);
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
+auto glfwSetup() -> GLFWwindow*;
 
 auto main() -> int {
-    // ===
-    // === GLFW STUFFS
-    // ===
-
-    // set the error callback function for glfw stuff
-    glfwSetErrorCallback(glfw_error_callback);
-
-    // init glfw
-    glfwInit();
-
-    // hint that we'll use OpenGL 3.3 core? not sure exactly
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-#ifdef __APPLE__
-    // lole
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-#endif
-
-    // create a window and context, check for errors,
-    // make this window current
-    GLFWwindow* window = glfwCreateWindow(
-        CU_TEX_WIDTH, CU_TEX_HEIGHT, "IM GLing LESSGOOO", nullptr, nullptr);
-    if (window == nullptr) {
-        std::cerr << "Failed to create GLFW window\n";
-        glfwTerminate();
+    GLFWwindow* window;
+    if (nullptr == (window = glfwSetup())) {
         return 1;
     }
-    glfwMakeContextCurrent(window);
-
-    // init the glad loader or something, not sure
-    if (gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress)) == 0) {
-        std::cerr << "Failed to initialize GLAD\n";
-        return 1;
-    }
-
-    // set the viewport dimensions?
-    glViewport(0, 0, CU_TEX_WIDTH, CU_TEX_HEIGHT);
-
-    // set callbacks for window resizes and keystrokes
-    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-    glfwSetKeyCallback(window, key_callback);
 
     // ===
     // === SHADER STUFFS (Rect VAO, VBO, EBO)
@@ -397,6 +360,50 @@ auto main() -> int {
     glDeleteBuffers(1, &rectangle_points_EBO);
     glfwDestroyWindow(window);
     glfwTerminate();
+}
+
+auto glfwSetup() -> GLFWwindow* {
+    // set the error callback function for glfw stuff
+    glfwSetErrorCallback(glfw_error_callback);
+
+    // init glfw
+    glfwInit();
+
+    // hint that we'll use OpenGL 3.3 core? not sure exactly
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+#ifdef __APPLE__
+    // not sure if this is even enough
+    // with all the weird stuff I've done anyway lole
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+#endif
+
+    // create a window and context, check for errors,
+    // make this window current
+    GLFWwindow* window = glfwCreateWindow(
+        CU_TEX_WIDTH, CU_TEX_HEIGHT, "IM GLing LESSGOOO", nullptr, nullptr);
+    if (window == nullptr) {
+        std::cerr << "Failed to create GLFW window\n";
+        glfwTerminate();
+        return nullptr;
+    }
+    glfwMakeContextCurrent(window);
+
+    // init the glad loader or something, not sure
+    if (gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress)) == 0) {
+        std::cerr << "Failed to initialize GLAD\n";
+        return nullptr;
+    }
+
+    // set the viewport dimensions?
+    glViewport(0, 0, CU_TEX_WIDTH, CU_TEX_HEIGHT);
+
+    // set callbacks for window resizes and keystrokes
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+    glfwSetKeyCallback(window, key_callback);
+
+    return window;
 }
 
 void glfw_error_callback(int error, const char* description) {
