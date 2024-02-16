@@ -46,7 +46,9 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action,
     (void)scancode;
     (void)mods;
 
+#ifdef DEBUG_KEYBOARD
     printf("Key:%d Action:%d\n", key, action);
+#endif // DEBUG_KEYBOARD
 
     // close if Esc pressed
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
