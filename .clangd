@@ -6,6 +6,13 @@ CompileFlags:
     - -L/usr/local/cuda/lib64
     - -I/usr/local/cuda/include
 
-  # boonk stuff:
+  # boonk cuda stuff:
   Remove:
     - -ftrack-macro-expansion=0
+    - -arch=sm_86
+    - --forward-unknown-to-host-compiler
+    - --dopt=on
+    - --use_fast_math
+    - --extra-device-vectorization
+    - --device-debug
+    - --profile
