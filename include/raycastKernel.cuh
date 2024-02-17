@@ -1,8 +1,12 @@
 #ifndef RAYCAST_KERNEL_CUH
 #define RAYCAST_KERNEL_CUH
 
-#include <cfloat>
 #include <cuda_runtime.h>
+
+#include <cfloat>
+#include <cmath>
+
+#include <sys/types.h>
 
 #include "cameraStuff.cuh"
 #include "matrix4x4.cuh"
