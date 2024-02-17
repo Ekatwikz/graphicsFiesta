@@ -8,7 +8,7 @@
 #include "matrix4x4.cuh"
 #include "mathHelpers.cuh"
 
-__global__ void write_texture_kernel(cudaSurfaceObject_t output_surface, CameraInfo* camInfo,
+__global__ void raycast_kernel(cudaSurfaceObject_t output_surface, CameraInfo* camInfo,
                                      Spheres* spheresInfo, uint sphereCount,
                                      Lights* lightsInfo, uint lightsCount) {
     uint x = blockIdx.x * blockDim.x + threadIdx.x;

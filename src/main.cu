@@ -312,7 +312,7 @@ auto main() -> int {
         dim3 block(16, 16);
         dim3 grid((CU_TEX_WIDTH + block.x - 1) / block.x, (CU_TEX_HEIGHT + block.y - 1) / block.y);
 
-        write_texture_kernel<<<grid, block>>>(output_surface, camInfo, spheresInfo, SPHERE_COUNT, lightsInfo, LIGHT_COUNT);
+        raycast_kernel<<<grid, block>>>(output_surface, camInfo, spheresInfo, SPHERE_COUNT, lightsInfo, LIGHT_COUNT);
         checkCudaErrors(cudaDeviceSynchronize());
 
         // Unmap the texture so that OpenGL can use it
