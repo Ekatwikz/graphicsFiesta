@@ -38,7 +38,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 auto glfwSetup() -> GLFWwindow*;
 
 auto main() -> int {
-    GLFWwindow* window;
+    GLFWwindow* window{};
     if (nullptr == (window = glfwSetup())) {
         return 1;
     }
@@ -67,13 +67,13 @@ auto main() -> int {
     };
 
     // setup and bind vertex array object
-    uint rectangle_VAO;
+    uint rectangle_VAO{};
     glGenVertexArrays(1, &rectangle_VAO);
     glBindVertexArray(rectangle_VAO);
 
     // setup vertex buffer object
     // with our vertices
-    uint rectangle_positions_VBO;
+    uint rectangle_positions_VBO{};
     glGenBuffers(1, &rectangle_positions_VBO);
     glBindBuffer(GL_ARRAY_BUFFER, rectangle_positions_VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(positions),
@@ -88,7 +88,7 @@ auto main() -> int {
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
 
     // setup some colors too
-    uint rectangle_colors_VBO;
+    uint rectangle_colors_VBO{};
     glGenBuffers(1, &rectangle_colors_VBO);
     glBindBuffer(GL_ARRAY_BUFFER, rectangle_colors_VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(colors),
@@ -98,7 +98,7 @@ auto main() -> int {
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
 
     // setup the element buffer object
-    uint rectangle_points_EBO = 0;
+    uint rectangle_points_EBO{};
     glGenBuffers(1, &rectangle_points_EBO);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, rectangle_points_EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices),
@@ -116,7 +116,7 @@ auto main() -> int {
     // ===
     // === TEXTURE BINDING STUFFS (BOX)
     // ===
-    unsigned int boxTexture;
+    uint boxTexture{};
     glGenTextures(1, &boxTexture);
 
     glActiveTexture(GL_TEXTURE0);
@@ -128,7 +128,10 @@ auto main() -> int {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     {
-        int width, height, nrChannels;
+        int width{};
+        int height{};
+        int nrChannels{};
+
         stbi_set_flip_vertically_on_load(static_cast<int>(true));
         uint8_t* data = stbi_load("./textures/container.jpg", &width, &height, &nrChannels, 0);
         if (data != nullptr) {
@@ -144,7 +147,7 @@ auto main() -> int {
     // ===
     // === TEXTURE BINDING STUFFS (SMILEY)
     // ===
-    unsigned int smileyTexture;
+    uint smileyTexture{};
     glGenTextures(1, &smileyTexture);
 
     glActiveTexture(GL_TEXTURE1);
@@ -156,8 +159,12 @@ auto main() -> int {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     {
-        int width, height, nrChannels;
+        int width{};
+        int height{};
+        int nrChannels{};
+
         stbi_set_flip_vertically_on_load(static_cast<int>(true));
+
         uint8_t* data = stbi_load("./textures/awesomeface.png", &width, &height, &nrChannels, 0);
         if (data != nullptr) {
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
@@ -179,7 +186,7 @@ auto main() -> int {
         0.0F, 1.0F, // top left
     };
 
-    uint rectangle_tex_VBO;
+    uint rectangle_tex_VBO{};
     glGenBuffers(1, &rectangle_tex_VBO);
     glBindBuffer(GL_ARRAY_BUFFER, rectangle_tex_VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(tex_coords),
@@ -194,7 +201,7 @@ auto main() -> int {
     // ===
 
     // Create an OpenGL texture
-    GLuint texture_id;
+    GLuint texture_id{};
     glGenTextures(1, &texture_id);
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, texture_id);
@@ -206,7 +213,7 @@ auto main() -> int {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     // Register the texture with CUDA
-    cudaGraphicsResource* cuda_texture_resource;
+    cudaGraphicsResource* cuda_texture_resource{};
     checkCudaErrors(cudaGraphicsGLRegisterImage(&cuda_texture_resource, texture_id, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard));
 
     // install shader and set uniforms so we can tell samplers' offsets ig?
@@ -223,6 +230,7 @@ auto main() -> int {
     checkCudaErrors(cudaMallocManaged(&spheresInfo, sizeof(Spheres)));
     checkCudaErrors(cudaMalloc(&spheresInfo->centers, sizeof(float3) * SPHERE_COUNT));
     checkCudaErrors(cudaMalloc(&spheresInfo->radii, sizeof(float) * SPHERE_COUNT));
+
     Lights* lightsInfo = nullptr;
     checkCudaErrors(cudaMallocManaged(&lightsInfo, sizeof(Lights)));
     checkCudaErrors(cudaMalloc(&lightsInfo->centers, sizeof(float3) * LIGHT_COUNT));
@@ -263,8 +271,7 @@ auto main() -> int {
     // ===
     // === Cam Setup
     // ===
-    CameraInfo* camInfo = nullptr;
-
+    CameraInfo* camInfo{};
     checkCudaErrors(cudaMallocManaged(&camInfo, sizeof(CameraInfo)));
     memset(camInfo, 0, sizeof(CameraInfo));
 
@@ -296,16 +303,15 @@ auto main() -> int {
         // ===
 
         // Map the cuda texture to CUDA
-        cudaArray* cuda_texture_array;
+        cudaArray* cuda_texture_array{};
         checkCudaErrors(cudaGraphicsMapResources(1, &cuda_texture_resource));
         checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&cuda_texture_array, cuda_texture_resource, 0, 0));
 
          // Create a surface object
-        cudaResourceDesc res_desc;
-        memset(&res_desc, 0, sizeof(res_desc));
+        cudaResourceDesc res_desc{};
         res_desc.resType = cudaResourceTypeArray;
         res_desc.res.array.array = cuda_texture_array;
-        cudaSurfaceObject_t output_surface;
+        cudaSurfaceObject_t output_surface{};
         checkCudaErrors(cudaCreateSurfaceObject(&output_surface, &res_desc));
 
         // === Run the CUDA kernel
