@@ -200,7 +200,8 @@ auto main() -> int {
     // ===
     // === SPHERE / LIGHTS SETUP
     // ===
-    Spheres* spheresInfo = nullptr;
+    // TODO: move this into operator-new?
+    Spheres* spheresInfo{};
     checkCudaErrors(cudaMallocManaged(&spheresInfo, sizeof(Spheres)));
     checkCudaErrors(cudaMalloc(&spheresInfo->centers, sizeof(float3) * SPHERE_COUNT));
     checkCudaErrors(cudaMalloc(&spheresInfo->radii, sizeof(float) * SPHERE_COUNT));
