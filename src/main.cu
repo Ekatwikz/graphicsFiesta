@@ -175,10 +175,10 @@ auto main() -> int {
     // ===
 
     // Create an OpenGL texture
-    GLuint texture_id{};
-    glGenTextures(1, &texture_id);
+    GLuint cudaTextureId{};
+    glGenTextures(1, &cudaTextureId);
     glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, texture_id);
+    glBindTexture(GL_TEXTURE_2D, cudaTextureId);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, CU_TEX_WIDTH, CU_TEX_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -188,7 +188,7 @@ auto main() -> int {
 
     // Register the texture with CUDA
     cudaGraphicsResource* cuda_texture_resource{};
-    checkCudaErrors(cudaGraphicsGLRegisterImage(&cuda_texture_resource, texture_id, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard));
+    checkCudaErrors(cudaGraphicsGLRegisterImage(&cuda_texture_resource, cudaTextureId, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard));
 
     // install shader and set uniforms so we can tell samplers' offsets ig?
     leShaderProgram.glUseProgram();
