@@ -9,19 +9,20 @@ static const uint HALF_TURN_DEGREES = 90; // lol
 
 class CameraInfo {
 public:
-    // idk this is pretty weird,
-    // I'll probz think about a neat way of doin this at some point
-    static auto alloc(uint width, uint height) -> CameraInfo* {
+    auto operator new(size_t amount) -> void* {
 	CameraInfo* camInfo{};
 
-	checkCudaErrors(cudaMallocManaged(&camInfo, sizeof(CameraInfo)));
-	memset(camInfo, 0, sizeof(CameraInfo));
+	// I really need to check how the params of opnew are supposed to be used lol
+	checkCudaErrors(cudaMallocManaged(&camInfo, sizeof(CameraInfo) * amount));
 
-	// TODO: get this from current reso or summink?
-	camInfo->imageResolution = make_uint2(width, height);
+	memset(camInfo, 0, sizeof(CameraInfo));
 	camInfo->fovDegrees = HALF_TURN_DEGREES;
 
 	return camInfo;
+    }
+
+    void operator delete(void* cameraInfo) {
+	checkCudaErrors(cudaFree(cameraInfo));
     }
 
     float3 center;
@@ -30,14 +31,54 @@ public:
     float3 eulerAngles;
 };
 
-struct Spheres {
+class Spheres {
+public:
+    auto operator new[](size_t amount) -> void* {
+	Spheres* spheresInfo{};
+
+	checkCudaErrors(cudaMallocManaged(&spheresInfo, sizeof(Spheres)));
+	checkCudaErrors(cudaMalloc(&spheresInfo->centers, sizeof(float3) * amount));
+	checkCudaErrors(cudaMalloc(&spheresInfo->radii, sizeof(float) * amount));
+
+	spheresInfo->sz = amount;
+	return spheresInfo;
+    }
+
+    void operator delete[](void* spheresV) {
+	auto* spheres = static_cast<Spheres*>(spheresV);
+	checkCudaErrors(cudaFree(spheres->centers));
+	checkCudaErrors(cudaFree(spheres->radii));
+	checkCudaErrors(cudaFree(spheres));
+    }
+
+    size_t sz;
     float3* centers;
     float* radii;
 };
 
 struct Lights {
+public:
+    auto operator new[](size_t amount) -> void* {
+	Lights* lightsInfo{};
+
+	checkCudaErrors(cudaMallocManaged(&lightsInfo, sizeof(Spheres)));
+	checkCudaErrors(cudaMalloc(&lightsInfo->centers, sizeof(float3) * amount));
+	checkCudaErrors(cudaMalloc(&lightsInfo->colors, sizeof(float) * amount));
+
+	lightsInfo->sz = amount;
+	return lightsInfo;
+    }
+
+    void operator delete[](void* lightsV) {
+	auto* lights = static_cast<Lights*>(lightsV);
+	checkCudaErrors(cudaFree(lights->centers));
+	checkCudaErrors(cudaFree(lights->colors));
+	checkCudaErrors(cudaFree(lights));
+    }
+
     float3* centers;
     float3* colors;
+    size_t sz;
     float3 attenuation;
     float ambientStrength;
 };

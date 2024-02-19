@@ -200,21 +200,17 @@ auto main() -> int {
     // ===
     // === SPHERE / LIGHTS SETUP
     // ===
-    // TODO: move this into operator-new?
-    Spheres* spheresInfo{};
-    checkCudaErrors(cudaMallocManaged(&spheresInfo, sizeof(Spheres)));
-    checkCudaErrors(cudaMalloc(&spheresInfo->centers, sizeof(float3) * SPHERE_COUNT));
-    checkCudaErrors(cudaMalloc(&spheresInfo->radii, sizeof(float) * SPHERE_COUNT));
 
-    Lights* lightsInfo = nullptr;
-    checkCudaErrors(cudaMallocManaged(&lightsInfo, sizeof(Lights)));
-    checkCudaErrors(cudaMalloc(&lightsInfo->centers, sizeof(float3) * LIGHT_COUNT));
-    checkCudaErrors(cudaMalloc(&lightsInfo->colors, sizeof(float3) * LIGHT_COUNT));
+    // TODO: move all the random stuff into the structs n stuff
+    auto* spheresInfo = new Spheres[SPHERE_COUNT];
+
+    auto* lightsInfo = new Lights[LIGHT_COUNT];
 
     // Hand picked for decent (-ish) scaling up to 500 units, probably should tweak depending on how far out the lights might be
     lightsInfo->attenuation = {1, 0.001, 0.00002};
     lightsInfo->ambientStrength = 0.1 / LIGHT_COUNT;
 
+    // stuff for randomizing spheres
     float3 centerMin = {5, 5, 5};
     float3 centerMax = {500, 500, 500};
     float radiusMin = 1;
@@ -243,10 +239,9 @@ auto main() -> int {
     initLights<<<(LIGHT_COUNT + 255) / 256, 256>>>(lightsInfo, centerMin, centerMax, LIGHT_COUNT, lightRandStates);
     checkCudaErrors(cudaDeviceSynchronize());
 
-    // ===
-    // === Cam Setup
-    // ===
-    CameraInfo* camInfo = CameraInfo::alloc(CU_TEX_WIDTH, CU_TEX_HEIGHT);
+    // Cam Setup
+    auto* camInfo = new CameraInfo;
+    camInfo->imageResolution = make_uint2(CU_TEX_WIDTH, CU_TEX_HEIGHT);
 
     // ===
     // === RENDER LOOP
@@ -331,17 +326,13 @@ auto main() -> int {
     // cleanup a little and exit
     checkCudaErrors(cudaGraphicsUnregisterResource(cuda_texture_resource));
 
-    checkCudaErrors(cudaFree(spheresInfo));
-    checkCudaErrors(cudaFree(spheresInfo->centers));
-    checkCudaErrors(cudaFree(spheresInfo->radii));
-
-    checkCudaErrors(cudaFree(lightsInfo));
-    checkCudaErrors(cudaFree(lightsInfo->centers));
-    checkCudaErrors(cudaFree(lightsInfo->colors));
+    delete[] spheresInfo;
+    delete[] lightsInfo;
 
     checkCudaErrors(cudaFree(sphereRandStates));
     checkCudaErrors(cudaFree(lightRandStates));
-    checkCudaErrors(cudaFree(camInfo));
+
+    delete camInfo;
 
     glDeleteVertexArrays(1, &rectangle_VAO);
     glDeleteBuffers(1, &rectangle_positions_VBO);
