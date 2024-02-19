@@ -246,13 +246,7 @@ auto main() -> int {
     // ===
     // === Cam Setup
     // ===
-    CameraInfo* camInfo{};
-    checkCudaErrors(cudaMallocManaged(&camInfo, sizeof(CameraInfo)));
-    memset(camInfo, 0, sizeof(CameraInfo));
-
-    // TODO: get this from current reso or summink?
-    camInfo->imageResolution = make_uint2(CU_TEX_WIDTH, CU_TEX_HEIGHT);
-    camInfo->fovDegrees = 90;
+    CameraInfo* camInfo = CameraInfo::alloc(CU_TEX_WIDTH, CU_TEX_HEIGHT);
 
     // ===
     // === RENDER LOOP
@@ -336,6 +330,9 @@ auto main() -> int {
 
     // cleanup a little and exit
     checkCudaErrors(cudaGraphicsUnregisterResource(cuda_texture_resource));
+
+    checkCudaErrors(cudaFree(camInfo));
+
     glDeleteVertexArrays(1, &rectangle_VAO);
     glDeleteBuffers(1, &rectangle_positions_VBO);
     glDeleteBuffers(1, &rectangle_points_EBO);
