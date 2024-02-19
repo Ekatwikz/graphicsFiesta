@@ -331,6 +331,16 @@ auto main() -> int {
     // cleanup a little and exit
     checkCudaErrors(cudaGraphicsUnregisterResource(cuda_texture_resource));
 
+    checkCudaErrors(cudaFree(spheresInfo));
+    checkCudaErrors(cudaFree(spheresInfo->centers));
+    checkCudaErrors(cudaFree(spheresInfo->radii));
+
+    checkCudaErrors(cudaFree(lightsInfo));
+    checkCudaErrors(cudaFree(lightsInfo->centers));
+    checkCudaErrors(cudaFree(lightsInfo->colors));
+
+    checkCudaErrors(cudaFree(sphereRandStates));
+    checkCudaErrors(cudaFree(lightRandStates));
     checkCudaErrors(cudaFree(camInfo));
 
     glDeleteVertexArrays(1, &rectangle_VAO);
