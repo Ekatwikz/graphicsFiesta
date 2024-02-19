@@ -18,6 +18,9 @@
 #include "initKernels.cuh"
 #include "mathHelpers.cuh"
 
+// debug stuff
+#include "glHelpers.cuh"
+
 // my le raycasting
 #include "raycastKernel.cuh"
 
@@ -127,22 +130,8 @@ auto main() -> int {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    {
-        int width{};
-        int height{};
-        int nrChannels{};
-
-        stbi_set_flip_vertically_on_load(static_cast<int>(true));
-        uint8_t* data = stbi_load("./textures/container.jpg", &width, &height, &nrChannels, 0);
-        if (data != nullptr) {
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-            glGenerateMipmap(GL_TEXTURE_2D); // probably not needed for later lol
-        } else {
-            std::cerr << "Failed to load texture\n";
-        }
-
-        stbi_image_free(data);
-    }
+    LOAD_AND_FLIP_TEXTURE_FROM_FILE("./textures/container.jpg", GL_RGB);
+    glGenerateMipmap(GL_TEXTURE_2D);
 
     // ===
     // === TEXTURE BINDING STUFFS (SMILEY)
@@ -158,23 +147,8 @@ auto main() -> int {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    {
-        int width{};
-        int height{};
-        int nrChannels{};
-
-        stbi_set_flip_vertically_on_load(static_cast<int>(true));
-
-        uint8_t* data = stbi_load("./textures/awesomeface.png", &width, &height, &nrChannels, 0);
-        if (data != nullptr) {
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-            glGenerateMipmap(GL_TEXTURE_2D); // probably not needed for later lol
-        } else {
-            std::cerr << "Failed to load texture\n";
-        }
-
-        stbi_image_free(data);
-    }
+    LOAD_AND_FLIP_TEXTURE_FROM_FILE("./textures/awesomeface.png", GL_RGBA);
+    glGenerateMipmap(GL_TEXTURE_2D);
 
     // ===
     // === TEXTURE VBO STUFFS
