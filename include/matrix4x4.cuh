@@ -16,17 +16,19 @@ struct Matrix4x4f {
     __device__ __host__ Matrix4x4f() : Matrix4x4f{{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}} {}
 
     __device__ __host__ Matrix4x4f(const float3& euler_angles, const float3& camera_position) : Matrix4x4f{} {
-        //  https://en.wikipedia.org/wiki/Euler_angles#Rotation_matrix
+        // https://en.wikipedia.org/wiki/Rotation_matrix#General_3D_rotations
         float c_1 = cosf(euler_angles.x);
         float s_1 = sinf(euler_angles.x);
+
         float c_2 = cosf(euler_angles.y);
         float s_2 = sinf(euler_angles.y);
+
         float c_3 = cosf(euler_angles.z);
         float s_3 = sinf(euler_angles.z);
 
-        rows[0] = make_float4(c_1 * c_2 * c_3 - s_1 * s_3, -c_3 * s_1 - c_1 * c_2 * s_3, c_1 * s_2, camera_position.x);
-        rows[1] = make_float4(c_1 * s_3 + c_2 * c_3 * s_1, c_1 * c_3 - c_2 * s_1 * s_3, s_1 * s_2, camera_position.y);
-        rows[2] = make_float4(-c_3 * s_2, s_2 * s_3, c_2, camera_position.z);
+        rows[0] = make_float4(c_2 * c_3, s_1 * s_2 * s_3 - c_1 * s_3, c_1 * s_2 * c_3 + s_1 * s_3, camera_position.x);
+        rows[1] = make_float4(c_2 * s_3, s_1 * s_2 * s_3 + c_1 * c_3, c_1 * s_2 * s_3 - s_1 * c_3, camera_position.y);
+        rows[2] = make_float4(-s_2, s_1 * c_2, c_1 * c_2, camera_position.z);
     }
 
     __inline__ __device__ __host__ auto operator*(const float4& vec) const -> float4 {

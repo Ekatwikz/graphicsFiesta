@@ -99,10 +99,10 @@ public:
 			case GLFW_KEY_L:
 				gamma.setPressed(0U != KB_GAMMA_DOWN, isPressed);
 				break;
-			case GLFW_KEY_I:
+			case GLFW_KEY_K:
 				alpha.setPressed(0U != KB_ALPHA_DOWN, isPressed);
 				break;
-			case GLFW_KEY_K:
+			case GLFW_KEY_I:
 				alpha.setPressed(0U != KB_ALPHA_UP, isPressed);
 				break;
 			case GLFW_KEY_U:
