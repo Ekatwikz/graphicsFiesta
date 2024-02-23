@@ -46,7 +46,7 @@ LDFLAGS+=-lglfw -lGL -lX11 -lpthread -lXrandr -lXi -ldl
 BASEFLAGS:=$(INCLUDEDIRS:%=-I%) -I$(GLADLIBDIR) $(WARNINGS:%=-W%) $(FFLAGS:%=-f%)
 CCFLAGS+=$(BASEFLAGS) $(DEBUGFLAGS)
 CXXFLAGS+=$(CCFLAGS) -std=$(STANDARD)
-NVCCFLAGS+=--forward-unknown-to-host-compiler $(NVDEBUGFLAGS) -diag-suppress 550 $(BASEFLAGS) -std=$(STANDARD) -arch=$(ARCH)
+NVCCFLAGS+=--forward-unknown-to-host-compiler $(NVDEBUGFLAGS) -diag-suppress 20012 -diag-suppress 550 $(BASEFLAGS) -std=$(STANDARD) -arch=$(ARCH)
 
 .PHONY: all clean
 .SECONDARY: $(GLADOBJECTS)
