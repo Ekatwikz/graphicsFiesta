@@ -1,6 +1,8 @@
-# CUDA/OpenGL/GLFW Playground
+# [CUDA/OpenGL/GLFW Playground](https://www.youtube.com/watch?v=V-m8WJZGBAU&list=PLk6u9j48w-dbdu2Wh8Fk4PAVldUqaNHrZ)
 
-![Project Demo](./_extras/demo.gif)
+**TIP**: Click heading/gif for a full HD demo  
+
+[![Project Demo](./_extras/demo.gif)](https://www.youtube.com/watch?v=V-m8WJZGBAU&list=PLk6u9j48w-dbdu2Wh8Fk4PAVldUqaNHrZ)  
 
 Currently the main tech of this demo is drawing _directly_ onto a GL texture using CUDA (by mapping the graphics resource)  
 I plan on adding more as I pick up more OpenGL  
